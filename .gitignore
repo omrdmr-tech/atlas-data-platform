@@ -1,0 +1,56 @@
+# Node
+
+node_modules/
+
+# Build
+
+dist/
+build/
+out/
+release/
+
+# Logs
+
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+
+# Environment
+
+.env
+.env.*
+
+# IDE
+
+.vscode/
+.idea/
+
+# OS
+
+.DS_Store
+Thumbs.db
+
+# Electron
+
+*.asar
+
+# Database
+
+*.db
+*.sqlite
+
+# Cache
+
+.cache/
+coverage/
+
+# Temporary
+
+tmp/
+temp/
+
+# Misc
+
+*.swp
+*.swo
