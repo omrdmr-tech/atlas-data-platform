@@ -3,3 +3,6 @@ export interface InfrastructureModule {
   initialize(): Promise<void>;
   shutdown(): Promise<void>;
 }
+
+export * from "./ports/clock.js";
+export * from "./adapters/system-clock.js";
