@@ -1,16 +1,19 @@
 import type { DomainEvent } from "../../../domain/events/domain-event.js";
 import type { EventBus, EventHandler } from "../../ports/event-bus.js";
+import type { IdempotencyStore } from "../../ports/idempotency-store.js";
 import { EventBusPublishError } from "./event-bus-error.js";
-import { validateRetryPolicy, type RetryPolicy } from "./retry-policy.js";
 import {
   defaultEventIdentity,
   type EventIdentityResolver
 } from "./idempotency.js";
+import { validateRetryPolicy, type RetryPolicy } from "./retry-policy.js";
+import { InMemoryIdempotencyStore } from "./in-memory-idempotency-store.js";
 
 export interface EventBusOptions {
   readonly retry?: RetryPolicy;
   readonly deduplicate?: boolean;
   readonly eventIdentity?: EventIdentityResolver;
+  readonly idempotencyStore?: IdempotencyStore;
 }
 
 export class InMemoryEventBus implements EventBus {
@@ -18,7 +21,7 @@ export class InMemoryEventBus implements EventBus {
   private readonly retry?: RetryPolicy;
   private readonly deduplicate: boolean;
   private readonly eventIdentity: EventIdentityResolver;
-  private readonly publishedEvents = new Set<string>();
+  private readonly idempotencyStore: IdempotencyStore;
 
   public constructor(options: EventBusOptions = {}) {
     if (options.retry) validateRetryPolicy(options.retry);
@@ -26,12 +29,14 @@ export class InMemoryEventBus implements EventBus {
     this.retry = options.retry;
     this.deduplicate = options.deduplicate ?? false;
     this.eventIdentity = options.eventIdentity ?? defaultEventIdentity;
+    this.idempotencyStore =
+      options.idempotencyStore ?? new InMemoryIdempotencyStore();
   }
 
   public async publish(event: DomainEvent): Promise<void> {
     const key = this.eventIdentity(event);
 
-    if (this.deduplicate && this.publishedEvents.has(key)) {
+    if (this.deduplicate && await this.idempotencyStore.has(key)) {
       return;
     }
 
@@ -51,7 +56,7 @@ export class InMemoryEventBus implements EventBus {
     }
 
     if (this.deduplicate) {
-      this.publishedEvents.add(key);
+      await this.idempotencyStore.mark(key);
     }
   }
 
@@ -75,7 +80,9 @@ export class InMemoryEventBus implements EventBus {
   }
 
   public clearPublishedEvents(): void {
-    this.publishedEvents.clear();
+    if (this.idempotencyStore instanceof InMemoryIdempotencyStore) {
+      this.idempotencyStore.clear();
+    }
   }
 
   private async executeWithRetry(
