@@ -19,4 +19,5 @@ export * from "./adapters/redis/cache-repository.js";
 export * from "./adapters/redis/redis-distributed-lock.js";
 export * from "./adapters/event-bus/event-bus-error.js";
 export * from "./adapters/event-bus/retry-policy.js";
+export * from "./adapters/event-bus/idempotency.js";
 export * from "./adapters/event-bus/in-memory-event-bus.js";

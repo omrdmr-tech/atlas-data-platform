@@ -2,21 +2,39 @@ import type { DomainEvent } from "../../../domain/events/domain-event.js";
 import type { EventBus, EventHandler } from "../../ports/event-bus.js";
 import { EventBusPublishError } from "./event-bus-error.js";
 import { validateRetryPolicy, type RetryPolicy } from "./retry-policy.js";
+import {
+  defaultEventIdentity,
+  type EventIdentityResolver
+} from "./idempotency.js";
 
 export interface EventBusOptions {
   readonly retry?: RetryPolicy;
+  readonly deduplicate?: boolean;
+  readonly eventIdentity?: EventIdentityResolver;
 }
 
 export class InMemoryEventBus implements EventBus {
   private readonly handlers = new Map<string, Set<EventHandler>>();
   private readonly retry?: RetryPolicy;
+  private readonly deduplicate: boolean;
+  private readonly eventIdentity: EventIdentityResolver;
+  private readonly publishedEvents = new Set<string>();
 
   public constructor(options: EventBusOptions = {}) {
     if (options.retry) validateRetryPolicy(options.retry);
+
     this.retry = options.retry;
+    this.deduplicate = options.deduplicate ?? false;
+    this.eventIdentity = options.eventIdentity ?? defaultEventIdentity;
   }
 
   public async publish(event: DomainEvent): Promise<void> {
+    const key = this.eventIdentity(event);
+
+    if (this.deduplicate && this.publishedEvents.has(key)) {
+      return;
+    }
+
     const handlers = [...(this.handlers.get(event.type) ?? [])];
     const failures: { eventType: string; error: unknown }[] = [];
 
@@ -30,6 +48,10 @@ export class InMemoryEventBus implements EventBus {
 
     if (failures.length > 0) {
       throw new EventBusPublishError(failures);
+    }
+
+    if (this.deduplicate) {
+      this.publishedEvents.add(key);
     }
   }
 
@@ -52,13 +74,16 @@ export class InMemoryEventBus implements EventBus {
     return this.handlers.get(eventType)?.size ?? 0;
   }
 
+  public clearPublishedEvents(): void {
+    this.publishedEvents.clear();
+  }
+
   private async executeWithRetry(
     handler: EventHandler,
     event: DomainEvent
   ): Promise<void> {
     const maxAttempts = this.retry?.maxAttempts ?? 1;
     const delayMs = this.retry?.delayMs ?? 0;
-
     let lastError: unknown;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
