@@ -1,3 +1,4 @@
+import { createClient, type RedisClientType } from "redis";
 import type { Cache } from "../../ports/cache.js";
 
 export interface RedisCacheOptions {
@@ -5,39 +6,65 @@ export interface RedisCacheOptions {
 }
 
 export class RedisCache implements Cache {
+  private client?: RedisClientType;
   private connected = false;
-  private readonly values = new Map<string, string>();
 
   public constructor(public readonly options: RedisCacheOptions) {}
 
   public async connect(): Promise<void> {
-    if (!this.options.url) throw new Error("Redis URL is required.");
+    if (!this.options.url) {
+      throw new Error("Redis URL is required.");
+    }
+
+    if (this.connected) return;
+
+    this.client = createClient({ url: this.options.url });
+    await this.client.connect();
     this.connected = true;
   }
 
   public async disconnect(): Promise<void> {
+    if (!this.client) {
+      this.connected = false;
+      return;
+    }
+
+    if (this.client.isOpen) {
+      await this.client.quit();
+    }
+
+    this.client = undefined;
     this.connected = false;
-    this.values.clear();
   }
 
   public async get(key: string): Promise<string | null> {
-    this.assertConnected();
-    return this.values.get(key) ?? null;
+    return this.getClient().get(key);
   }
 
-  public async set(key: string, value: string, _ttlSeconds?: number): Promise<void> {
-    this.assertConnected();
-    this.values.set(key, value);
+  public async set(key: string, value: string, ttlSeconds?: number): Promise<void> {
+    const client = this.getClient();
+
+    if (ttlSeconds !== undefined) {
+      await client.set(key, value, { EX: ttlSeconds });
+      return;
+    }
+
+    await client.set(key, value);
   }
 
   public async delete(key: string): Promise<void> {
-    this.assertConnected();
-    this.values.delete(key);
+    await this.getClient().del(key);
   }
 
-  public isConnected(): boolean { return this.connected; }
+  public isConnected(): boolean {
+    return this.connected;
+  }
 
-  private assertConnected(): void {
-    if (!this.connected) throw new Error("Redis cache is not connected.");
+  private getClient(): RedisClientType {
+    if (!this.client || !this.connected) {
+      throw new Error("Redis cache is not connected.");
+    }
+
+    return this.client;
   }
 }
