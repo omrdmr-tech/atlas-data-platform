@@ -5,9 +5,10 @@
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "test": "node --test"
+    "test": "pnpm build && node --test dist/domain/entities/entity.test.js dist/domain/value-objects/value-object.test.js"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "typescript": "^5.9.0"
   }
 }
