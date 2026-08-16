@@ -1,0 +1,10 @@
+{
+  "name": "atlas-data-platform",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@10",
+  "scripts": {
+    "build": "pnpm --filter @atlas/core build",
+    "test": "pnpm --filter @atlas/core test"
+  }
+}
