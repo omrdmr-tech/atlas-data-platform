@@ -1,1 +1,5 @@
 export * from "./use-cases/use-case.js";
+export * from "./commands/command.js";
+export * from "./commands/command-handler.js";
+export * from "./queries/query.js";
+export * from "./queries/query-handler.js";
