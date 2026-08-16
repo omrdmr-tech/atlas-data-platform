@@ -1,9 +1,20 @@
 import type { DomainEvent } from "../../../domain/events/domain-event.js";
 import type { EventBus, EventHandler } from "../../ports/event-bus.js";
 import { EventBusPublishError } from "./event-bus-error.js";
+import { validateRetryPolicy, type RetryPolicy } from "./retry-policy.js";
+
+export interface EventBusOptions {
+  readonly retry?: RetryPolicy;
+}
 
 export class InMemoryEventBus implements EventBus {
   private readonly handlers = new Map<string, Set<EventHandler>>();
+  private readonly retry?: RetryPolicy;
+
+  public constructor(options: EventBusOptions = {}) {
+    if (options.retry) validateRetryPolicy(options.retry);
+    this.retry = options.retry;
+  }
 
   public async publish(event: DomainEvent): Promise<void> {
     const handlers = [...(this.handlers.get(event.type) ?? [])];
@@ -11,12 +22,9 @@ export class InMemoryEventBus implements EventBus {
 
     for (const handler of handlers) {
       try {
-        await handler(event);
+        await this.executeWithRetry(handler, event);
       } catch (error) {
-        failures.push({
-          eventType: event.type,
-          error
-        });
+        failures.push({ eventType: event.type, error });
       }
     }
 
@@ -26,9 +34,7 @@ export class InMemoryEventBus implements EventBus {
   }
 
   public subscribe(eventType: string, handler: EventHandler): () => void {
-    if (!eventType) {
-      throw new Error("Event type is required.");
-    }
+    if (!eventType) throw new Error("Event type is required.");
 
     const handlers =
       this.handlers.get(eventType) ?? new Set<EventHandler>();
@@ -38,14 +44,36 @@ export class InMemoryEventBus implements EventBus {
 
     return () => {
       handlers.delete(handler);
-
-      if (handlers.size === 0) {
-        this.handlers.delete(eventType);
-      }
+      if (handlers.size === 0) this.handlers.delete(eventType);
     };
   }
 
   public handlerCount(eventType: string): number {
     return this.handlers.get(eventType)?.size ?? 0;
+  }
+
+  private async executeWithRetry(
+    handler: EventHandler,
+    event: DomainEvent
+  ): Promise<void> {
+    const maxAttempts = this.retry?.maxAttempts ?? 1;
+    const delayMs = this.retry?.delayMs ?? 0;
+
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+      try {
+        await handler(event);
+        return;
+      } catch (error) {
+        lastError = error;
+
+        if (attempt < maxAttempts && delayMs > 0) {
+          await new Promise<void>((resolve) => setTimeout(resolve, delayMs));
+        }
+      }
+    }
+
+    throw lastError;
   }
 }

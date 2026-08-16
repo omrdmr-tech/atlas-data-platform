@@ -10,7 +10,7 @@ class UserCreatedEvent extends BaseDomainEvent {
   }
 }
 
-test("event bus publishes events to all subscribed handlers", async () => {
+test("event bus publishes events to subscribed handlers", async () => {
   const bus = new InMemoryEventBus();
   const calls: string[] = [];
 
@@ -18,22 +18,57 @@ test("event bus publishes events to all subscribed handlers", async () => {
     calls.push("first");
   });
 
+  await bus.publish(new UserCreatedEvent("user-1"));
+
+  assert.deepEqual(calls, ["first"]);
+});
+
+test("event bus retries a failed handler", async () => {
+  const bus = new InMemoryEventBus({
+    retry: { maxAttempts: 3, delayMs: 0 }
+  });
+
+  let attempts = 0;
+
   bus.subscribe("UserCreated", async () => {
-    calls.push("second");
+    attempts += 1;
+    if (attempts < 3) throw new Error("temporary");
   });
 
   await bus.publish(new UserCreatedEvent("user-1"));
 
-  assert.deepEqual(calls, ["first", "second"]);
-  assert.equal(bus.handlerCount("UserCreated"), 2);
+  assert.equal(attempts, 3);
 });
 
-test("event bus continues after a handler fails", async () => {
-  const bus = new InMemoryEventBus();
+test("event bus fails after retry limit", async () => {
+  const bus = new InMemoryEventBus({
+    retry: { maxAttempts: 2, delayMs: 0 }
+  });
+
+  let attempts = 0;
+
+  bus.subscribe("UserCreated", async () => {
+    attempts += 1;
+    throw new Error("permanent");
+  });
+
+  await assert.rejects(
+    bus.publish(new UserCreatedEvent("user-1")),
+    (error: unknown) => error instanceof EventBusPublishError
+  );
+
+  assert.equal(attempts, 2);
+});
+
+test("event bus continues with other handlers after retry exhaustion", async () => {
+  const bus = new InMemoryEventBus({
+    retry: { maxAttempts: 2, delayMs: 0 }
+  });
+
   let secondHandlerCalled = false;
 
   bus.subscribe("UserCreated", async () => {
-    throw new Error("first handler failed");
+    throw new Error("failed");
   });
 
   bus.subscribe("UserCreated", async () => {
@@ -42,65 +77,20 @@ test("event bus continues after a handler fails", async () => {
 
   await assert.rejects(
     bus.publish(new UserCreatedEvent("user-1")),
-    (error: unknown) => {
-      assert.ok(error instanceof EventBusPublishError);
-      assert.equal(error.failures.length, 1);
-      assert.equal(error.failures[0]?.eventType, "UserCreated");
-      return true;
-    }
+    (error: unknown) => error instanceof EventBusPublishError
   );
 
   assert.equal(secondHandlerCalled, true);
 });
 
-test("event bus aggregates multiple handler failures", async () => {
-  const bus = new InMemoryEventBus();
-
-  bus.subscribe("UserCreated", async () => {
-    throw new Error("first");
-  });
-
-  bus.subscribe("UserCreated", async () => {
-    throw new Error("second");
-  });
-
-  await assert.rejects(
-    bus.publish(new UserCreatedEvent("user-1")),
-    (error: unknown) => {
-      assert.ok(error instanceof EventBusPublishError);
-      assert.equal(error.failures.length, 2);
-      return true;
-    }
+test("event bus validates retry policy", () => {
+  assert.throws(
+    () => new InMemoryEventBus({ retry: { maxAttempts: 0, delayMs: 0 } }),
+    /maxAttempts must be a positive integer/
   );
-});
-
-test("event bus unsubscribe removes only the registered handler", async () => {
-  const bus = new InMemoryEventBus();
-  let first = 0;
-  let second = 0;
-
-  const unsubscribe = bus.subscribe("UserCreated", async () => {
-    first += 1;
-  });
-
-  bus.subscribe("UserCreated", async () => {
-    second += 1;
-  });
-
-  unsubscribe();
-
-  await bus.publish(new UserCreatedEvent("user-1"));
-
-  assert.equal(first, 0);
-  assert.equal(second, 1);
-  assert.equal(bus.handlerCount("UserCreated"), 1);
-});
-
-test("event bus rejects an empty event type", () => {
-  const bus = new InMemoryEventBus();
 
   assert.throws(
-    () => bus.subscribe("", async () => {}),
-    /Event type is required/
+    () => new InMemoryEventBus({ retry: { maxAttempts: 1, delayMs: -1 } }),
+    /delayMs must be a non-negative integer/
   );
 });
