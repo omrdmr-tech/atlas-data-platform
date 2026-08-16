@@ -24,3 +24,6 @@ export * from "./adapters/event-bus/retry-policy.js";
 export * from "./adapters/event-bus/idempotency.js";
 export * from "./adapters/event-bus/in-memory-idempotency-store.js";
 export * from "./adapters/event-bus/in-memory-event-bus.js";
+export * from "./application/outbox-dispatcher.js";
+export * from "./ports/outbox-publisher.js";
+export * from "./adapters/event-bus/outbox-event-publisher.js";
