@@ -1,10 +1,13 @@
+import { Pool } from "pg";
 import type { Database } from "../../ports/database.js";
 
 export interface PostgreSQLDatabaseOptions {
   readonly connectionString: string;
+  readonly maxConnections?: number;
 }
 
 export class PostgreSQLDatabase implements Database {
+  private pool?: Pool;
   private connected = false;
 
   public constructor(public readonly options: PostgreSQLDatabaseOptions) {}
@@ -14,15 +17,39 @@ export class PostgreSQLDatabase implements Database {
       throw new Error("PostgreSQL connection string is required.");
     }
 
-    // Actual pg client integration is intentionally deferred.
+    if (this.connected) {
+      return;
+    }
+
+    this.pool = new Pool({
+      connectionString: this.options.connectionString,
+      max: this.options.maxConnections
+    });
+
+    await this.pool.query("SELECT 1");
     this.connected = true;
   }
 
   public async disconnect(): Promise<void> {
+    if (!this.pool) {
+      this.connected = false;
+      return;
+    }
+
+    await this.pool.end();
+    this.pool = undefined;
     this.connected = false;
   }
 
   public isConnected(): boolean {
     return this.connected;
+  }
+
+  public getPool(): Pool {
+    if (!this.pool || !this.connected) {
+      throw new Error("PostgreSQL database is not connected.");
+    }
+
+    return this.pool;
   }
 }
