@@ -56,7 +56,12 @@ test("outbox dispatcher publishes and marks successful events", async () => {
 
   const result = await dispatcher.dispatchOnce();
 
-  assert.deepEqual(result, { fetched: 2, published: 2, failed: 0 });
+  assert.deepEqual(result, {
+    fetched: 2,
+    published: 2,
+    failed: 0
+  });
+
   assert.deepEqual(publisher.published, ["evt-1", "evt-2"]);
   assert.deepEqual(store.published, ["evt-1", "evt-2"]);
 });
@@ -64,12 +69,18 @@ test("outbox dispatcher publishes and marks successful events", async () => {
 test("outbox dispatcher does not mark failed events", async () => {
   const store = new FakeStore();
   const publisher = new FakePublisher();
+
   publisher.failures.add("evt-1");
 
   const dispatcher = new OutboxDispatcher(store, publisher);
   const result = await dispatcher.dispatchOnce();
 
-  assert.deepEqual(result, { fetched: 2, published: 1, failed: 1 });
+  assert.deepEqual(result, {
+    fetched: 2,
+    published: 1,
+    failed: 1
+  });
+
   assert.deepEqual(publisher.published, ["evt-2"]);
   assert.deepEqual(store.published, ["evt-2"]);
 });
@@ -77,22 +88,32 @@ test("outbox dispatcher does not mark failed events", async () => {
 test("outbox dispatcher continues after a failed event", async () => {
   const store = new FakeStore();
   const publisher = new FakePublisher();
+
   publisher.failures.add("evt-1");
 
   const dispatcher = new OutboxDispatcher(store, publisher);
+
   await dispatcher.dispatchOnce();
 
-  assert.equal(publisher.published.includes("evt-2"), true);
+  assert.deepEqual(publisher.published, ["evt-2"]);
 });
 
 test("outbox dispatcher respects the batch size", async () => {
   const store = new FakeStore();
   const publisher = new FakePublisher();
-  const dispatcher = new OutboxDispatcher(store, publisher, { maxBatchSize: 1 });
+
+  const dispatcher = new OutboxDispatcher(store, publisher, {
+    maxBatchSize: 1
+  });
 
   const result = await dispatcher.dispatchOnce();
 
-  assert.deepEqual(result, { fetched: 1, published: 1, failed: 0 });
+  assert.deepEqual(result, {
+    fetched: 1,
+    published: 1,
+    failed: 0
+  });
+
   assert.deepEqual(store.published, ["evt-1"]);
 });
 
@@ -101,12 +122,18 @@ test("outbox dispatcher validates the batch size", () => {
   const publisher = new FakePublisher();
 
   assert.throws(
-    () => new OutboxDispatcher(store, publisher, { maxBatchSize: 0 }),
+    () =>
+      new OutboxDispatcher(store, publisher, {
+        maxBatchSize: 0
+      }),
     /positive integer/
   );
 
   assert.throws(
-    () => new OutboxDispatcher(store, publisher, { maxBatchSize: 1.5 }),
+    () =>
+      new OutboxDispatcher(store, publisher, {
+        maxBatchSize: 1.5
+      }),
     /positive integer/
   );
 });
@@ -120,5 +147,108 @@ test("outbox dispatcher can dispatch an empty batch", async () => {
 
   const result = await dispatcher.dispatchOnce();
 
-  assert.deepEqual(result, { fetched: 0, published: 0, failed: 0 });
+  assert.deepEqual(result, {
+    fetched: 0,
+    published: 0,
+    failed: 0
+  });
 });
+
+test("outbox dispatcher starts immediately", async () => {
+  const store = new FakeStore();
+  const publisher = new FakePublisher();
+
+  const dispatcher = new OutboxDispatcher(store, publisher, {
+    pollIntervalMs: 60_000
+  });
+
+  dispatcher.start();
+
+  await waitFor(() => publisher.published.length === 2);
+
+  assert.equal(dispatcher.isRunning, true);
+  assert.deepEqual(publisher.published, ["evt-1", "evt-2"]);
+
+  await dispatcher.stop();
+
+  assert.equal(dispatcher.isRunning, false);
+});
+
+test("outbox dispatcher ignores repeated start calls", async () => {
+  const store = new FakeStore();
+  const publisher = new FakePublisher();
+
+  const dispatcher = new OutboxDispatcher(store, publisher, {
+    pollIntervalMs: 60_000
+  });
+
+  dispatcher.start();
+  dispatcher.start();
+  dispatcher.start();
+
+  await waitFor(() => publisher.published.length === 2);
+
+  await dispatcher.stop();
+
+  assert.equal(dispatcher.isRunning, false);
+  assert.deepEqual(publisher.published, ["evt-1", "evt-2"]);
+});
+
+test("outbox dispatcher allows repeated stop calls", async () => {
+  const store = new FakeStore();
+  const publisher = new FakePublisher();
+
+  const dispatcher = new OutboxDispatcher(store, publisher, {
+    pollIntervalMs: 60_000
+  });
+
+  dispatcher.start();
+
+  await waitFor(() => publisher.published.length === 2);
+
+  await Promise.all([
+    dispatcher.stop(),
+    dispatcher.stop(),
+    dispatcher.stop()
+  ]);
+
+  assert.equal(dispatcher.isRunning, false);
+});
+
+test("outbox dispatcher validates poll interval", () => {
+  const store = new FakeStore();
+  const publisher = new FakePublisher();
+
+  assert.throws(
+    () =>
+      new OutboxDispatcher(store, publisher, {
+        pollIntervalMs: 0
+      }),
+    /positive integer/
+  );
+
+  assert.throws(
+    () =>
+      new OutboxDispatcher(store, publisher, {
+        pollIntervalMs: 1.5
+      }),
+    /positive integer/
+  );
+});
+
+async function waitFor(
+  predicate: () => boolean,
+  timeoutMs = 2_000
+): Promise<void> {
+  const startedAt = Date.now();
+
+  while (!predicate()) {
+    if (Date.now() - startedAt >= timeoutMs) {
+      throw new Error("Timed out waiting for outbox dispatcher.");
+    }
+
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 1);
+    });
+  }
+}
