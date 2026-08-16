@@ -5,4 +5,6 @@ export interface InfrastructureModule {
 }
 
 export * from "./ports/clock.js";
+export * from "./ports/database.js";
 export * from "./adapters/system-clock.js";
+export * from "./adapters/postgresql/postgresql-database.js";
