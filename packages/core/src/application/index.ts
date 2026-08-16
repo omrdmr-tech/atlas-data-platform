@@ -4,3 +4,4 @@ export * from "./commands/command-handler.js";
 export * from "./queries/query.js";
 export * from "./queries/query-handler.js";
 export * from "./di/container.js";
+export * from "./services/application-service.js";
