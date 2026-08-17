@@ -27,3 +27,4 @@ export * from "./adapters/event-bus/in-memory-event-bus.js";
 export * from "./application/outbox-dispatcher.js";
 export * from "./ports/outbox-publisher.js";
 export * from "./adapters/event-bus/outbox-event-publisher.js";
+export * from "./infrastructure-runtime.js";
