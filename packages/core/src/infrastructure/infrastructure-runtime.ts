@@ -1,20 +1,24 @@
 import type { Database } from "./ports/database.js";
 
-export interface InfrastructureLifecycle {
-  initialize(): Promise<void>;
-  shutdown(): Promise<void>;
-}
-
 export interface InfrastructureRuntimeOptions {
   readonly database: Database;
-  readonly cache: InfrastructureLifecycle;
-  readonly idempotencyStore: InfrastructureLifecycle;
-  readonly dispatcher: InfrastructureLifecycle;
+
+  readonly cache: {
+    connect(): Promise<void>;
+    disconnect(): Promise<void>;
+  };
+
+  readonly idempotencyStore: {
+    initialize(): Promise<void>;
+  };
+
+  readonly dispatcher: {
+    start(): void;
+    stop(): Promise<void>;
+  };
 }
 
-export class InfrastructureRuntime
-  implements InfrastructureLifecycle
-{
+export class InfrastructureRuntime {
   private initialized = false;
   private shuttingDown: Promise<void> | null = null;
 
@@ -34,13 +38,16 @@ export class InfrastructureRuntime
     await this.options.database.connect();
 
     try {
-      await this.options.cache.initialize();
+      await this.options.cache.connect();
       await this.options.idempotencyStore.initialize();
-      await this.options.dispatcher.initialize();
+
+      this.options.dispatcher.start();
 
       this.initialized = true;
     } catch (error) {
+      await this.options.cache.disconnect();
       await this.options.database.disconnect();
+
       throw error;
     }
   }
@@ -69,9 +76,8 @@ export class InfrastructureRuntime
   private async performShutdown(): Promise<void> {
     this.initialized = false;
 
-    await this.options.dispatcher.shutdown();
-    await this.options.idempotencyStore.shutdown();
-    await this.options.cache.shutdown();
+    await this.options.dispatcher.stop();
+    await this.options.cache.disconnect();
     await this.options.database.disconnect();
   }
 }

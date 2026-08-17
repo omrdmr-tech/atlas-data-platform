@@ -25,13 +25,13 @@ class FakeCache {
   public connected = false;
   public calls: string[] = [];
 
-  public async initialize(): Promise<void> {
-    this.calls.push("initialize");
+  public async connect(): Promise<void> {
+    this.calls.push("connect");
     this.connected = true;
   }
 
-  public async shutdown(): Promise<void> {
-    this.calls.push("shutdown");
+  public async disconnect(): Promise<void> {
+    this.calls.push("disconnect");
     this.connected = false;
   }
 }
@@ -44,24 +44,19 @@ class FakeIdempotencyStore {
     this.calls.push("initialize");
     this.initialized = true;
   }
-
-  public async shutdown(): Promise<void> {
-    this.calls.push("shutdown");
-    this.initialized = false;
-  }
 }
 
 class FakeDispatcher {
   public running = false;
   public calls: string[] = [];
 
-  public async initialize(): Promise<void> {
-    this.calls.push("initialize");
+  public start(): void {
+    this.calls.push("start");
     this.running = true;
   }
 
-  public async shutdown(): Promise<void> {
-    this.calls.push("shutdown");
+  public async stop(): Promise<void> {
+    this.calls.push("stop");
     this.running = false;
   }
 }
@@ -100,7 +95,7 @@ test(
 
     assert.deepEqual(
       cache.calls,
-      ["initialize"]
+      ["connect"]
     );
 
     assert.deepEqual(
@@ -110,7 +105,7 @@ test(
 
     assert.deepEqual(
       dispatcher.calls,
-      ["initialize"]
+      ["start"]
     );
   }
 );
@@ -138,24 +133,24 @@ test(
     assert.equal(cache.connected, false);
     assert.equal(
       idempotencyStore.initialized,
-      false
+      true
     );
     assert.equal(dispatcher.running, false);
     assert.equal(runtime.isInitialized, false);
 
     assert.deepEqual(
       dispatcher.calls,
-      ["initialize", "shutdown"]
+      ["start", "stop"]
     );
 
     assert.deepEqual(
       idempotencyStore.calls,
-      ["initialize", "shutdown"]
+      ["initialize"]
     );
 
     assert.deepEqual(
       cache.calls,
-      ["initialize", "shutdown"]
+      ["connect", "disconnect"]
     );
 
     assert.deepEqual(
@@ -193,7 +188,7 @@ test(
 
     assert.deepEqual(
       cache.calls,
-      ["initialize"]
+      ["connect"]
     );
 
     assert.deepEqual(
@@ -203,7 +198,7 @@ test(
 
     assert.deepEqual(
       dispatcher.calls,
-      ["initialize"]
+      ["start"]
     );
   }
 );
@@ -232,17 +227,17 @@ test(
 
     assert.deepEqual(
       dispatcher.calls,
-      ["initialize", "shutdown"]
+      ["start", "stop"]
     );
 
     assert.deepEqual(
       idempotencyStore.calls,
-      ["initialize", "shutdown"]
+      ["initialize"]
     );
 
     assert.deepEqual(
       cache.calls,
-      ["initialize", "shutdown"]
+      ["connect", "disconnect"]
     );
 
     assert.deepEqual(
