@@ -36,4 +36,23 @@ export class PostgreSQLTransaction implements Transaction {
   public isActive(): boolean {
     return this.active;
   }
+
+  public async query<T = Record<string, unknown>>(
+    text: string,
+    parameters?: readonly unknown[],
+  ): Promise<{
+    rows: T[];
+    rowCount: number | null;
+  }> {
+    if (!this.active) {
+      throw new Error("An active transaction is required to execute a query.");
+    }
+
+    const result = await this.client.query(text, parameters as unknown[]);
+
+    return {
+      rows: result.rows as T[],
+      rowCount: result.rowCount,
+    };
+  }
 }

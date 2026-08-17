@@ -1,3 +1,4 @@
+import type { Transaction } from "./transaction.js";
 export interface OutboxEvent {
   readonly id: string;
   readonly type: string;
@@ -25,22 +26,4 @@ export interface OutboxStore {
   ): Promise<PendingOutboxEvent[]>;
 
   markPublished(id: string, owner: string): Promise<void>;
-}
-
-export interface Transaction {
-  begin(): Promise<void>;
-
-  commit(): Promise<void>;
-
-  rollback(): Promise<void>;
-
-  isActive(): boolean;
-
-  query<T = Record<string, unknown>>(
-    text: string,
-    parameters?: readonly unknown[]
-  ): Promise<{
-    rows: T[];
-    rowCount: number | null;
-  }>;
 }

@@ -1,9 +1,9 @@
 import type {
-  OutboxEvent,
   OutboxStore,
-  PendingOutboxEvent,
-  Transaction
+  OutboxEvent,
+  PendingOutboxEvent
 } from "../../ports/outbox.js";
+import type { Transaction } from "../../ports/transaction.js";
 
 interface OutboxRow {
   id: string;
