@@ -299,7 +299,135 @@ test(
     );
   }
 );
+test(
+  "PostgreSQL outbox claim ignores events with an active lease",
+  async () => {
+    const calls: Array<{
+      text: string;
+      parameters?: readonly unknown[];
+    }> = [];
 
+    const store = new PostgreSQLOutboxStore({
+      async query<T = Record<string, unknown>>(
+        text: string,
+        parameters?: readonly unknown[]
+      ) {
+        calls.push({ text, parameters });
+
+        return {
+          rows: [] as T[],
+          rowCount: 0
+        };
+      }
+    });
+
+    const claimed = await store.claimPending(
+      "worker-2",
+      10,
+      30_000
+    );
+
+    assert.deepEqual(claimed, []);
+    assert.equal(calls.length, 1);
+
+    assert.match(
+      calls[0].text,
+      /lease_until IS NULL/
+    );
+
+    assert.match(
+      calls[0].text,
+      /lease_until <= CURRENT_TIMESTAMP/
+    );
+  }
+);
+
+test(
+  "PostgreSQL outbox claim can recover an expired lease",
+  async () => {
+    const expiredLease = new Date(
+      "2026-01-01T00:00:00.000Z"
+    );
+
+    const renewedLease = new Date(
+      "2026-01-01T00:01:00.000Z"
+    );
+
+    const calls: Array<{
+      text: string;
+      parameters?: readonly unknown[];
+    }> = [];
+
+    const store = new PostgreSQLOutboxStore({
+      async query<T = Record<string, unknown>>(
+        text: string,
+        parameters?: readonly unknown[]
+      ) {
+        calls.push({ text, parameters });
+
+        return {
+          rows: [
+            {
+              id: "evt-1",
+              event_type: "UserCreated",
+              payload: { userId: "u-1" },
+              occurred_at: new Date(
+                "2026-01-01T00:00:00.000Z"
+              ),
+              created_at: new Date(
+                "2026-01-01T00:00:01.000Z"
+              ),
+              published_at: null,
+              attempts: 2,
+              lease_owner: "worker-2",
+              lease_until: renewedLease
+            }
+          ] as T[],
+          rowCount: 1
+        };
+      }
+    });
+
+    const claimed = await store.claimPending(
+      "worker-2",
+      10,
+      60_000
+    );
+
+    assert.equal(claimed.length, 1);
+    assert.equal(claimed[0].id, "evt-1");
+    assert.equal(
+      claimed[0].leaseOwner,
+      "worker-2"
+    );
+    assert.deepEqual(
+      claimed[0].leaseUntil,
+      renewedLease
+    );
+    assert.equal(claimed[0].attempts, 2);
+
+    assert.equal(calls.length, 1);
+    assert.match(
+      calls[0].text,
+      /lease_until IS NULL/
+    );
+    assert.match(
+      calls[0].text,
+      /lease_until <= CURRENT_TIMESTAMP/
+    );
+    assert.deepEqual(
+      calls[0].parameters,
+      [10, "worker-2", 60_000]
+    );
+
+    // The old lease was expired; the claim is allowed
+    // to replace it with a new owner and lease.
+    assert.notEqual(
+      expiredLease.getTime(),
+      renewedLease.getTime()
+    );
+  }
+);
 test(
   "PostgreSQL outbox validates claim owner",
   async () => {

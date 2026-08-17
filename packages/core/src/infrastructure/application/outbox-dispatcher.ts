@@ -36,7 +36,7 @@ export class OutboxDispatcher {
     this.maxBatchSize = options.maxBatchSize ?? 100;
     this.pollIntervalMs = options.pollIntervalMs ?? 5000;
     this.leaseDurationMs = options.leaseDurationMs ?? 30_000;
-    this.owner = options.owner ?? "outbox-dispatcher";
+this.owner = options.owner ?? "outbox-dispatcher";
 
     if (
       !Number.isInteger(this.maxBatchSize) ||
