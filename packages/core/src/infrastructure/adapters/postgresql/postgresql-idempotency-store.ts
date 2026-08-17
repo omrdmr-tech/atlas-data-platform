@@ -2,16 +2,22 @@ import type { Pool } from "pg";
 import type { IdempotencyStore } from "../../ports/idempotency-store.js";
 import type { PostgreSQLDatabase } from "./postgresql-database.js";
 
-export class PostgreSQLIdempotencyStore implements IdempotencyStore {
-  private readonly pool: Pool;
+export class PostgreSQLIdempotencyStore
+  implements IdempotencyStore
+{
+  private pool?: Pool;
   private initialized = false;
 
-  public constructor(database: PostgreSQLDatabase) {
-    this.pool = database.getPool();
-  }
+  public constructor(
+    private readonly database: PostgreSQLDatabase
+  ) {}
 
   public async initialize(): Promise<void> {
-    if (this.initialized) return;
+    if (this.initialized) {
+      return;
+    }
+
+    this.pool = this.database.getPool();
 
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS event_bus_idempotency (
@@ -26,7 +32,15 @@ export class PostgreSQLIdempotencyStore implements IdempotencyStore {
   public async has(key: string): Promise<boolean> {
     await this.initialize();
 
-    const result = await this.pool.query(
+    const pool = this.pool;
+
+    if (!pool) {
+      throw new Error(
+        "PostgreSQL idempotency store is not initialized."
+      );
+    }
+
+    const result = await pool.query(
       "SELECT 1 FROM event_bus_idempotency WHERE event_key = $1 LIMIT 1",
       [key]
     );
@@ -37,7 +51,15 @@ export class PostgreSQLIdempotencyStore implements IdempotencyStore {
   public async mark(key: string): Promise<void> {
     await this.initialize();
 
-    await this.pool.query(
+    const pool = this.pool;
+
+    if (!pool) {
+      throw new Error(
+        "PostgreSQL idempotency store is not initialized."
+      );
+    }
+
+    await pool.query(
       `INSERT INTO event_bus_idempotency (event_key)
        VALUES ($1)
        ON CONFLICT (event_key) DO NOTHING`,
