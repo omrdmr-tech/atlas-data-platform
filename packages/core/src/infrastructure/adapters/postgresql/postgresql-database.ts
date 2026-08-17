@@ -1,5 +1,7 @@
 import { Pool } from "pg";
 import type { Database } from "../../ports/database.js";
+import type { Transaction } from "../../ports/transaction.js";
+import { PostgreSQLTransaction } from "./postgresql-transaction.js";
 
 export interface PostgreSQLDatabaseOptions {
   readonly connectionString: string;
@@ -26,8 +28,14 @@ export class PostgreSQLDatabase implements Database {
       max: this.options.maxConnections
     });
 
-    await this.pool.query("SELECT 1");
-    this.connected = true;
+    try {
+      await this.pool.query("SELECT 1");
+      this.connected = true;
+    } catch (error) {
+      await this.pool.end();
+      this.pool = undefined;
+      throw error;
+    }
   }
 
   public async disconnect(): Promise<void> {
@@ -37,6 +45,7 @@ export class PostgreSQLDatabase implements Database {
     }
 
     await this.pool.end();
+
     this.pool = undefined;
     this.connected = false;
   }
@@ -51,5 +60,10 @@ export class PostgreSQLDatabase implements Database {
     }
 
     return this.pool;
+  }
+
+  public async createTransaction(): Promise<Transaction> {
+    const client = await this.getPool().connect();
+    return new PostgreSQLTransaction(client);
   }
 }

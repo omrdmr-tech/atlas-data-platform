@@ -11,8 +11,13 @@ export class PostgreSQLTransaction implements Transaction {
       return;
     }
 
-    await this.client.query("BEGIN");
-    this.active = true;
+    try {
+      await this.client.query("BEGIN");
+      this.active = true;
+    } catch (error) {
+      this.client.release();
+      throw error;
+    }
   }
 
   public async commit(): Promise<void> {
@@ -20,8 +25,12 @@ export class PostgreSQLTransaction implements Transaction {
       return;
     }
 
-    await this.client.query("COMMIT");
-    this.active = false;
+    try {
+      await this.client.query("COMMIT");
+    } finally {
+      this.active = false;
+      this.client.release();
+    }
   }
 
   public async rollback(): Promise<void> {
@@ -29,8 +38,12 @@ export class PostgreSQLTransaction implements Transaction {
       return;
     }
 
-    await this.client.query("ROLLBACK");
-    this.active = false;
+    try {
+      await this.client.query("ROLLBACK");
+    } finally {
+      this.active = false;
+      this.client.release();
+    }
   }
 
   public isActive(): boolean {

@@ -19,6 +19,9 @@ class FakeDatabase {
   public isConnected(): boolean {
     return this.connected;
   }
+    public async createTransaction(): Promise<never> {
+    throw new Error("Not implemented in infrastructure runtime test.");
+  }
 }
 
 class FakeCache {

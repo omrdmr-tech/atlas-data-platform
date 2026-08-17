@@ -10,7 +10,11 @@ function createClient() {
     query: async (sql: string) => {
       queries.push(sql);
       return { rows: [] };
-    }
+    },
+
+    release: () => {
+      // Testte PostgreSQL bağlantısının pool'a geri bırakılmasını simüle eder.
+    },
   } as unknown as PoolClient;
 
   return { client, queries };
