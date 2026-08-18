@@ -1,12 +1,19 @@
 {
-  "name":"@atlas/core",
-  "version":"0.1.0",
-  "private":true,
-  "type":"module",
-  "scripts":{
-    "build":"tsc -p tsconfig.json",
-    "test": "pnpm build && node --test dist/domain/entities/entity.test.js dist/domain/value-objects/value-object.test.js dist/domain/events/domain-event.test.js dist/domain/repositories/repository.test.js dist/application/use-cases/use-case.test.js dist/application/commands/command.test.js dist/application/queries/query.test.js dist/application/di/container.test.js dist/application/services/application-service.test.js dist/application/ports/scraper.test.js dist/application/ports/scraper-orchestrator.test.js dist/application/ports/scraper-capabilities.test.js dist/infrastructure/adapters/scraper/http-scraper.test.js dist/infrastructure/infrastructure-module.test.js dist/infrastructure/infrastructure-runtime.test.js dist/infrastructure/adapters/system-clock.test.js dist/infrastructure/adapters/postgresql/postgresql-database.test.js dist/infrastructure/adapters/postgresql/postgresql-repository.test.js dist/infrastructure/adapters/postgresql/postgresql-transaction.test.js dist/infrastructure/adapters/redis/redis-cache.test.js dist/infrastructure/adapters/redis/cache-repository.test.js dist/infrastructure/adapters/redis/redis-distributed-lock.test.js dist/infrastructure/adapters/event-bus/in-memory-event-bus.test.js dist/infrastructure/adapters/postgresql/postgresql-outbox-store.test.js dist/infrastructure/application/outbox-dispatcher.test.js"
-  },
-  "dependencies":{"pg":"^8.16.3","redis":"^5.8.2"},
-  "devDependencies":{"@types/node":"^22.0.0","@types/pg":"^8.15.5","typescript":"^5.9.0"}
+    "name":  "@atlas/core",
+    "version":  "0.1.0",
+    "private":  true,
+    "type":  "module",
+    "scripts":  {
+                    "build":  "tsc -p tsconfig.json",
+                    "test":  "pnpm build \u0026\u0026 node --test dist/domain/entities/entity.test.js dist/domain/value-objects/value-object.test.js dist/domain/events/domain-event.test.js dist/domain/repositories/repository.test.js dist/application/use-cases/use-case.test.js dist/application/commands/command.test.js dist/application/queries/query.test.js dist/application/di/container.test.js dist/application/services/application-service.test.js dist/application/ports/scraper.test.js dist/application/ports/scraper-orchestrator.test.js dist/application/ports/scraper-capabilities.test.js dist/infrastructure/adapters/scraper/http-scraper.test.js dist/infrastructure/infrastructure-module.test.js dist/infrastructure/infrastructure-runtime.test.js dist/infrastructure/adapters/system-clock.test.js dist/infrastructure/adapters/postgresql/postgresql-database.test.js dist/infrastructure/adapters/postgresql/postgresql-repository.test.js dist/infrastructure/adapters/postgresql/postgresql-transaction.test.js dist/infrastructure/adapters/redis/redis-cache.test.js dist/infrastructure/adapters/redis/cache-repository.test.js dist/infrastructure/adapters/redis/redis-distributed-lock.test.js dist/infrastructure/adapters/event-bus/in-memory-event-bus.test.js dist/infrastructure/adapters/postgresql/postgresql-outbox-store.test.js dist/infrastructure/application/outbox-dispatcher.test.js dist/infrastructure/adapters/scraper/scraper-orchestrator.test.js"
+                },
+    "dependencies":  {
+                         "pg":  "^8.16.3",
+                         "redis":  "^5.8.2"
+                     },
+    "devDependencies":  {
+                            "@types/node":  "^22.0.0",
+                            "@types/pg":  "^8.15.5",
+                            "typescript":  "^5.9.0"
+                        }
 }

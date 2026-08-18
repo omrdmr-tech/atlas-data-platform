@@ -428,3 +428,91 @@ test(
     assert.equal(browserScraper.calls.length, 1);
   }
 );
+test(
+  "ScraperOrchestrator does not record capability-mismatched scrapers as failures",
+  async () => {
+    const httpScraper = new FakeScraper(
+      "http-scraper",
+      async () => {
+        throw new Error("HTTP scraper should not execute");
+      },
+      ["http"]
+    );
+
+    const browserScraper = new FakeScraper(
+      "browser-scraper",
+      async (request) =>
+        successResult(request.url, "browser"),
+      ["browser", "javascript"]
+    );
+
+    const orchestrator = new ScraperOrchestrator([
+      httpScraper,
+      browserScraper,
+    ]);
+
+    const result = await orchestrator.execute({
+      url: "https://example.com",
+      requiredCapabilities: ["browser"],
+    });
+
+    assert.equal(result.scraperId, "browser-scraper");
+    assert.equal(result.result.content, "browser");
+    assert.deepEqual(result.failures, []);
+
+    assert.equal(httpScraper.calls.length, 0);
+    assert.equal(browserScraper.calls.length, 1);
+  }
+);
+
+test(
+  "ScraperOrchestrator fails when no scraper satisfies required capabilities",
+  async () => {
+    const httpScraper = new FakeScraper(
+      "http-scraper",
+      async () =>
+        successResult(
+          "https://example.com",
+          "http"
+        ),
+      ["http"]
+    );
+
+    const browserScraper = new FakeScraper(
+      "browser-scraper",
+      async () =>
+        successResult(
+          "https://example.com",
+          "browser"
+        ),
+      ["browser", "javascript"]
+    );
+
+    const orchestrator = new ScraperOrchestrator([
+      httpScraper,
+      browserScraper,
+    ]);
+
+    await assert.rejects(
+      orchestrator.execute({
+        url: "https://example.com",
+        requiredCapabilities: ["proxy"],
+      }),
+      (error: unknown) => {
+        assert.ok(
+          error instanceof ScraperOrchestrationError
+        );
+        assert.equal(
+          error.url,
+          "https://example.com"
+        );
+        assert.deepEqual(error.failures, []);
+
+        return true;
+      }
+    );
+
+    assert.equal(httpScraper.calls.length, 0);
+    assert.equal(browserScraper.calls.length, 0);
+  }
+);
