@@ -1,7 +1,11 @@
-import type { ScraperDescriptor } from "./scraper-capabilities.js";
+import type {
+  ScraperCapability,
+  ScraperDescriptor,
+} from "./scraper-capabilities.js";
 
 export interface ScrapeRequest {
   readonly url: string;
+  readonly requiredCapabilities?: readonly ScraperCapability[];
 }
 
 export interface ScrapeResult {

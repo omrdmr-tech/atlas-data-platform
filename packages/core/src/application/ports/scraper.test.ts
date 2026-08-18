@@ -39,3 +39,19 @@ test("Scraper executes a scrape request", async () => {
   assert.equal(result.content, "<html></html>");
   assert.equal(result.contentType, "text/html");
 });
+test("ScrapeRequest supports required scraper capabilities", async () => {
+  const scraper = new TestScraper();
+
+  const request: ScrapeRequest = {
+    url: "https://example.com",
+    requiredCapabilities: ["browser", "javascript"],
+  };
+
+  const result = await scraper.execute(request);
+
+  assert.deepEqual(request.requiredCapabilities, [
+    "browser",
+    "javascript",
+  ]);
+  assert.equal(result.url, "https://example.com");
+});

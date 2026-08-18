@@ -9,10 +9,9 @@ import type {
   ScrapeRequest,
   Scraper,
 } from "../../../application/ports/scraper.js";
+import type { ScraperCapability } from "../../../application/ports/scraper-capabilities.js";
 
-export class ScraperOrchestrator
-  implements ScraperOrchestratorPort
-{
+export class ScraperOrchestrator implements ScraperOrchestratorPort {
   private readonly scrapers: readonly Scraper[];
 
   public constructor(scrapers: readonly Scraper[]) {
@@ -24,11 +23,17 @@ export class ScraperOrchestrator
   }
 
   public async execute(
-    request: ScrapeRequest
+    request: ScrapeRequest,
   ): Promise<ScraperOrchestrationResult> {
     const failures: ScraperFailure[] = [];
 
     for (const scraper of this.scrapers) {
+      if (
+        !supportsRequiredCapabilities(scraper, request.requiredCapabilities)
+      ) {
+        continue;
+      }
+
       try {
         const result = await scraper.execute(request);
 
@@ -44,9 +49,7 @@ export class ScraperOrchestrator
           scraperId: scraper.id,
           reason: classifyHttpStatus(result.statusCode),
           statusCode: result.statusCode,
-          error: new Error(
-            `Scraper returned HTTP ${result.statusCode}.`
-          ),
+          error: new Error(`Scraper returned HTTP ${result.statusCode}.`),
         });
       } catch (error) {
         failures.push({
@@ -58,16 +61,30 @@ export class ScraperOrchestrator
       }
     }
 
-    throw new ScraperOrchestrationError(
-      request.url,
-      failures
-    );
+    throw new ScraperOrchestrationError(request.url, failures);
   }
 }
+function supportsRequiredCapabilities(
+  scraper: Scraper,
+  requiredCapabilities:
+    | readonly ScraperCapability[]
+    | undefined
+): boolean {
+  if (
+    requiredCapabilities === undefined ||
+    requiredCapabilities.length === 0
+  ) {
+    return true;
+  }
 
-function classifyHttpStatus(
-  statusCode: number
-): ScraperFailureReason {
+  return requiredCapabilities.every(
+    (requiredCapability) =>
+      scraper.descriptor.capabilities.includes(
+        requiredCapability
+      )
+  );
+}
+function classifyHttpStatus(statusCode: number): ScraperFailureReason {
   if (statusCode === 401 || statusCode === 403) {
     return "blocked";
   }
@@ -92,10 +109,7 @@ function classifyHttpStatus(
 }
 
 function classifyError(error: unknown): ScraperFailureReason {
-  if (
-    error instanceof DOMException &&
-    error.name === "AbortError"
-  ) {
+  if (error instanceof DOMException && error.name === "AbortError") {
     return "timeout";
   }
 
@@ -110,13 +124,8 @@ export class ScraperOrchestrationError extends Error {
   public readonly url: string;
   public readonly failures: readonly ScraperFailure[];
 
-  public constructor(
-    url: string,
-    failures: readonly ScraperFailure[]
-  ) {
-    super(
-      `All configured scrapers failed for URL: ${url}`
-    );
+  public constructor(url: string, failures: readonly ScraperFailure[]) {
+    super(`All configured scrapers failed for URL: ${url}`);
 
     this.name = "ScraperOrchestrationError";
     this.url = url;

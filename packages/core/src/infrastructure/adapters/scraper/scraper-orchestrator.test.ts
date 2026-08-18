@@ -5,6 +5,7 @@ import type {
   ScrapeResult,
   Scraper,
 } from "../../../application/ports/scraper.js";
+import type { ScraperCapability } from "../../../application/ports/scraper-capabilities.js";
 import {
   ScraperOrchestrationError,
   ScraperOrchestrator,
@@ -13,12 +14,23 @@ import {
 class FakeScraper implements Scraper {
   public readonly calls: ScrapeRequest[] = [];
 
+  public readonly descriptor: {
+  readonly scraperId: string;
+  readonly capabilities: readonly ScraperCapability[];
+};
+
   public constructor(
-    public readonly id: string,
-    private readonly handler: (
-      request: ScrapeRequest
-    ) => Promise<ScrapeResult>
-  ) {}
+  public readonly id: string,
+  private readonly handler: (
+    request: ScrapeRequest
+  ) => Promise<ScrapeResult>,
+  capabilities: readonly ScraperCapability[] = ["http"]
+) {
+  this.descriptor = {
+    scraperId: id,
+    capabilities,
+  };
+}
 
   public async execute(
     request: ScrapeRequest
@@ -373,3 +385,46 @@ test("ScraperOrchestrator classifies TypeError as network-error", async () => {
     }
   );
 });
+test(
+  "ScraperOrchestrator skips scrapers that do not satisfy required capabilities",
+  async () => {
+    const httpScraper = new FakeScraper(
+      "http-scraper",
+      async (request) =>
+        successResult(request.url, "http"),
+      ["http"]
+    );
+
+    const browserScraper = new FakeScraper(
+      "browser-scraper",
+      async (request) =>
+        successResult(request.url, "browser"),
+      ["browser", "javascript"]
+    );
+
+    const orchestrator = new ScraperOrchestrator([
+      httpScraper,
+      browserScraper,
+    ]);
+
+    const result = await orchestrator.execute({
+      url: "https://example.com",
+      requiredCapabilities: [
+        "browser",
+        "javascript",
+      ],
+    });
+
+    assert.equal(
+      result.scraperId,
+      "browser-scraper"
+    );
+    assert.equal(
+      result.result.content,
+      "browser"
+    );
+
+    assert.equal(httpScraper.calls.length, 0);
+    assert.equal(browserScraper.calls.length, 1);
+  }
+);
