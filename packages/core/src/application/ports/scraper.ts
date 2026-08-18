@@ -1,3 +1,5 @@
+import type { ScraperDescriptor } from "./scraper-capabilities.js";
+
 export interface ScrapeRequest {
   readonly url: string;
 }
@@ -11,5 +13,6 @@ export interface ScrapeResult {
 
 export interface Scraper {
   readonly id: string;
+  readonly descriptor: ScraperDescriptor;
   execute(request: ScrapeRequest): Promise<ScrapeResult>;
 }

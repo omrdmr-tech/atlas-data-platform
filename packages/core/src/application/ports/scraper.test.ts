@@ -9,6 +9,11 @@ import type {
 class TestScraper implements Scraper {
   public readonly id = "test-scraper";
 
+  public readonly descriptor = {
+    scraperId: "test-scraper",
+    capabilities: ["http"] as const,
+  };
+
   public async execute(request: ScrapeRequest): Promise<ScrapeResult> {
     return {
       url: request.url,
@@ -27,6 +32,8 @@ test("Scraper executes a scrape request", async () => {
   });
 
   assert.equal(scraper.id, "test-scraper");
+  assert.equal(scraper.descriptor.scraperId, "test-scraper");
+  assert.deepEqual(scraper.descriptor.capabilities, ["http"]);
   assert.equal(result.url, "https://example.com");
   assert.equal(result.statusCode, 200);
   assert.equal(result.content, "<html></html>");

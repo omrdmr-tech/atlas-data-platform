@@ -8,6 +8,11 @@ import type {
 import type { ScraperOrchestrator } from "./scraper-orchestrator.js";
 
 class TestScraper implements Scraper {
+  public readonly descriptor = {
+    scraperId: "test",
+    capabilities: ["http"] as const,
+  };
+
   public constructor(
     public readonly id: string,
     private readonly response: ScrapeResult

@@ -4,6 +4,8 @@ import type {
   Scraper,
 } from "../../../application/ports/scraper.js";
 
+import type { ScraperDescriptor } from "../../../application/ports/scraper-capabilities.js";
+
 export interface HttpScraperOptions {
   readonly timeoutMs?: number;
   readonly userAgent?: string;
@@ -11,7 +13,12 @@ export interface HttpScraperOptions {
 }
 
 export class HttpScraper implements Scraper {
-  public readonly id = "http-scraper";
+ public readonly id = "http-scraper";
+
+public readonly descriptor = {
+  scraperId: "http-scraper",
+  capabilities: ["http"] as const,
+};
 
   private readonly timeoutMs: number;
   private readonly userAgent: string;
