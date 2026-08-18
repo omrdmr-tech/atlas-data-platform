@@ -1,10 +1,18 @@
-import type {
-  ScrapeRequest,
-  ScrapeResult,
-} from "./scraper.js";
+import type { ScrapeRequest, ScrapeResult } from "./scraper.js";
+
+export type ScraperFailureReason =
+  | "blocked"
+  | "rate-limited"
+  | "server-error"
+  | "timeout"
+  | "network-error"
+  | "http-error"
+  | "unknown";
 
 export interface ScraperFailure {
   readonly scraperId: string;
+  readonly reason: ScraperFailureReason;
+  readonly statusCode: number | null;
   readonly error: unknown;
 }
 

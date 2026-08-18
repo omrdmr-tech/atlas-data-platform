@@ -7,3 +7,4 @@ export * from "./di/container.js";
 export * from "./services/application-service.js";
 export * from "./ports/scraper.js";
 export * from "./ports/scraper-orchestrator.js";
+export * from "./ports/scraper-capabilities.js";

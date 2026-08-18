@@ -1,5 +1,6 @@
 import type {
   ScraperFailure,
+  ScraperFailureReason,
   ScraperOrchestrationResult,
   ScraperOrchestrator as ScraperOrchestratorPort,
 } from "../../../application/ports/scraper-orchestrator.js";
@@ -31,14 +32,27 @@ export class ScraperOrchestrator
       try {
         const result = await scraper.execute(request);
 
-        return {
-          result,
+        if (result.statusCode >= 200 && result.statusCode < 300) {
+          return {
+            result,
+            scraperId: scraper.id,
+            failures: [...failures],
+          };
+        }
+
+        failures.push({
           scraperId: scraper.id,
-          failures: [...failures],
-        };
+          reason: classifyHttpStatus(result.statusCode),
+          statusCode: result.statusCode,
+          error: new Error(
+            `Scraper returned HTTP ${result.statusCode}.`
+          ),
+        });
       } catch (error) {
         failures.push({
           scraperId: scraper.id,
+          reason: classifyError(error),
+          statusCode: null,
           error,
         });
       }
@@ -49,6 +63,47 @@ export class ScraperOrchestrator
       failures
     );
   }
+}
+
+function classifyHttpStatus(
+  statusCode: number
+): ScraperFailureReason {
+  if (statusCode === 401 || statusCode === 403) {
+    return "blocked";
+  }
+
+  if (statusCode === 408 || statusCode === 504) {
+    return "timeout";
+  }
+
+  if (statusCode === 429) {
+    return "rate-limited";
+  }
+
+  if (statusCode >= 500 && statusCode <= 599) {
+    return "server-error";
+  }
+
+  if (statusCode >= 400 && statusCode <= 499) {
+    return "http-error";
+  }
+
+  return "unknown";
+}
+
+function classifyError(error: unknown): ScraperFailureReason {
+  if (
+    error instanceof DOMException &&
+    error.name === "AbortError"
+  ) {
+    return "timeout";
+  }
+
+  if (error instanceof TypeError) {
+    return "network-error";
+  }
+
+  return "unknown";
 }
 
 export class ScraperOrchestrationError extends Error {

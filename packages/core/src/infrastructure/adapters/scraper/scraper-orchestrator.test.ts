@@ -214,3 +214,162 @@ test("ScraperOrchestrator preserves scraper order", async () => {
     "third",
   ]);
 });
+test("ScraperOrchestrator classifies HTTP 403 as blocked", async () => {
+  const scraper = new FakeScraper(
+    "blocked-scraper",
+    async (request) => ({
+      url: request.url,
+      statusCode: 403,
+      content: "Forbidden",
+      contentType: "text/html",
+    })
+  );
+
+  const orchestrator = new ScraperOrchestrator([scraper]);
+
+  await assert.rejects(
+    orchestrator.execute({
+      url: "https://example.com",
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof ScraperOrchestrationError);
+      assert.equal(error.failures.length, 1);
+      assert.equal(error.failures[0]?.reason, "blocked");
+      assert.equal(error.failures[0]?.statusCode, 403);
+
+      return true;
+    }
+  );
+});
+
+test("ScraperOrchestrator classifies HTTP 429 as rate-limited", async () => {
+  const scraper = new FakeScraper(
+    "rate-limited-scraper",
+    async (request) => ({
+      url: request.url,
+      statusCode: 429,
+      content: "Too Many Requests",
+      contentType: "text/html",
+    })
+  );
+
+  const orchestrator = new ScraperOrchestrator([scraper]);
+
+  await assert.rejects(
+    orchestrator.execute({
+      url: "https://example.com",
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof ScraperOrchestrationError);
+      assert.equal(error.failures[0]?.reason, "rate-limited");
+      assert.equal(error.failures[0]?.statusCode, 429);
+
+      return true;
+    }
+  );
+});
+
+test("ScraperOrchestrator classifies HTTP 500 as server-error", async () => {
+  const scraper = new FakeScraper(
+    "server-error-scraper",
+    async (request) => ({
+      url: request.url,
+      statusCode: 500,
+      content: "Internal Server Error",
+      contentType: "text/html",
+    })
+  );
+
+  const orchestrator = new ScraperOrchestrator([scraper]);
+
+  await assert.rejects(
+    orchestrator.execute({
+      url: "https://example.com",
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof ScraperOrchestrationError);
+      assert.equal(error.failures[0]?.reason, "server-error");
+      assert.equal(error.failures[0]?.statusCode, 500);
+
+      return true;
+    }
+  );
+});
+
+test("ScraperOrchestrator classifies HTTP 404 as http-error", async () => {
+  const scraper = new FakeScraper(
+    "not-found-scraper",
+    async (request) => ({
+      url: request.url,
+      statusCode: 404,
+      content: "Not Found",
+      contentType: "text/html",
+    })
+  );
+
+  const orchestrator = new ScraperOrchestrator([scraper]);
+
+  await assert.rejects(
+    orchestrator.execute({
+      url: "https://example.com",
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof ScraperOrchestrationError);
+      assert.equal(error.failures[0]?.reason, "http-error");
+      assert.equal(error.failures[0]?.statusCode, 404);
+
+      return true;
+    }
+  );
+});
+
+test("ScraperOrchestrator classifies AbortError as timeout", async () => {
+  const scraper = new FakeScraper(
+    "timeout-scraper",
+    async () => {
+      throw new DOMException(
+        "The operation was aborted.",
+        "AbortError"
+      );
+    }
+  );
+
+  const orchestrator = new ScraperOrchestrator([scraper]);
+
+  await assert.rejects(
+    orchestrator.execute({
+      url: "https://example.com",
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof ScraperOrchestrationError);
+      assert.equal(error.failures[0]?.reason, "timeout");
+      assert.equal(error.failures[0]?.statusCode, null);
+
+      return true;
+    }
+  );
+});
+
+test("ScraperOrchestrator classifies TypeError as network-error", async () => {
+  const scraper = new FakeScraper(
+    "network-scraper",
+    async () => {
+      throw new TypeError("fetch failed");
+    }
+  );
+
+  const orchestrator = new ScraperOrchestrator([scraper]);
+
+  await assert.rejects(
+    orchestrator.execute({
+      url: "https://example.com",
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof ScraperOrchestrationError);
+      assert.equal(error.failures[0]?.reason, "network-error");
+      assert.equal(error.failures[0]?.statusCode, null);
+
+      return true;
+    }
+  );
+});
