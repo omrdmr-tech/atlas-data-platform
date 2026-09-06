@@ -8,3 +8,5 @@ export * from "./services/application-service.js";
 export * from "./ports/scraper.js";
 export * from "./ports/scraper-orchestrator.js";
 export * from "./ports/scraper-capabilities.js";
+export * from "./ports/scraper-registry.js";
+export * from "./ports/scraper-selection-policy.js";

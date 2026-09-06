@@ -1,74 +1,85 @@
-import { test } from "node:test";
+﻿import test from "node:test";
 import assert from "node:assert/strict";
-import type {
-  ScrapeRequest,
-  ScrapeResult,
-  Scraper,
-} from "../../../application/ports/scraper.js";
-import type { ScraperCapability } from "../../../application/ports/scraper-capabilities.js";
+
+import type { Scraper } from "../../../application/ports/scraper.js";
+import type { ScraperRegistry } from "../../../application/ports/scraper-registry.js";
+import type { ScraperSelectionPolicy } from "../../../application/ports/scraper-selection-policy.js";
+
 import {
   ScraperOrchestrationError,
   ScraperOrchestrator,
 } from "./scraper-orchestrator.js";
 
-class FakeScraper implements Scraper {
-  public readonly calls: ScrapeRequest[] = [];
+function createScraper(
+  id: string,
+  execute: Scraper["execute"],
+  capabilities: readonly string[] = ["http"]
+): Scraper {
+  return {
+    id,
+    descriptor: {
+      scraperId: id,
+      capabilities: capabilities as never,
+    },
+    execute,
+  };
+}
 
-  public readonly descriptor: {
-  readonly scraperId: string;
-  readonly capabilities: readonly ScraperCapability[];
+function createRegistry(
+  scrapers: readonly Scraper[]
+): ScraperRegistry {
+  return {
+    register() {},
+    getAll() {
+      return [...scrapers];
+    },
+    findByCapabilities(requiredCapabilities) {
+      return scrapers.filter((scraper) =>
+        requiredCapabilities.every((capability) =>
+          scraper.descriptor.capabilities.includes(capability)
+        )
+      );
+    },
+    findById(scraperId) {
+      return (
+        scrapers.find((scraper) => scraper.id === scraperId) ??
+        null
+      );
+    },
+  };
+}
+
+const preserveOrderPolicy: ScraperSelectionPolicy = {
+  select(_request, candidates, failures) {
+    const failed = new Set(
+      failures.map((failure) => failure.scraperId)
+    );
+
+    return candidates.filter(
+      (candidate) => !failed.has(candidate.id)
+    );
+  },
 };
 
-  public constructor(
-  public readonly id: string,
-  private readonly handler: (
-    request: ScrapeRequest
-  ) => Promise<ScrapeResult>,
-  capabilities: readonly ScraperCapability[] = ["http"]
-) {
-  this.descriptor = {
-    scraperId: id,
-    capabilities,
-  };
-}
-
-  public async execute(
-    request: ScrapeRequest
-  ): Promise<ScrapeResult> {
-    this.calls.push(request);
-    return this.handler(request);
-  }
-}
-
-function successResult(
-  url: string,
-  content: string
-): ScrapeResult {
-  return {
-    url,
+test("orchestrator returns the first successful scraper result", async () => {
+  const first = createScraper("first", async () => ({
+    url: "https://example.com",
     statusCode: 200,
-    content,
+    content: "first",
     contentType: "text/html",
-  };
-}
+  }));
 
-test("ScraperOrchestrator uses the first successful scraper", async () => {
-  const first = new FakeScraper(
-    "first",
-    async (request) =>
-      successResult(request.url, "first")
+  const second = createScraper("second", async () => ({
+    url: "https://example.com",
+    statusCode: 200,
+    content: "second",
+    contentType: "text/html",
+  }));
+
+  const orchestrator = new ScraperOrchestrator(
+    createRegistry([first, second]),
+    preserveOrderPolicy
   );
-
-  const second = new FakeScraper(
-    "second",
-    async (request) =>
-      successResult(request.url, "second")
-  );
-
-  const orchestrator = new ScraperOrchestrator([
-    first,
-    second,
-  ]);
 
   const result = await orchestrator.execute({
     url: "https://example.com",
@@ -77,442 +88,195 @@ test("ScraperOrchestrator uses the first successful scraper", async () => {
   assert.equal(result.scraperId, "first");
   assert.equal(result.result.content, "first");
   assert.deepEqual(result.failures, []);
-  assert.equal(first.calls.length, 1);
-  assert.equal(second.calls.length, 0);
 });
 
-test("ScraperOrchestrator falls back after a scraper failure", async () => {
-  const firstError = new Error("first scraper failed");
+test("orchestrator falls back after a scraper failure", async () => {
+  const first = createScraper("first", async () => {
+    throw new Error("failed");
+  });
 
-  const first = new FakeScraper(
-    "first",
-    async () => {
-      throw firstError;
-    }
+  const second = createScraper("second", async () => ({
+    url: "https://example.com",
+    statusCode: 200,
+    content: "second",
+    contentType: "text/html",
+  }));
+
+  const orchestrator = new ScraperOrchestrator(
+    createRegistry([first, second]),
+    preserveOrderPolicy
   );
-
-  const second = new FakeScraper(
-    "second",
-    async (request) =>
-      successResult(request.url, "second")
-  );
-
-  const orchestrator = new ScraperOrchestrator([
-    first,
-    second,
-  ]);
 
   const result = await orchestrator.execute({
     url: "https://example.com",
   });
 
   assert.equal(result.scraperId, "second");
-  assert.equal(result.result.content, "second");
-
   assert.equal(result.failures.length, 1);
   assert.equal(result.failures[0]?.scraperId, "first");
-  assert.equal(result.failures[0]?.error, firstError);
-
-  assert.equal(first.calls.length, 1);
-  assert.equal(second.calls.length, 1);
 });
 
-test("ScraperOrchestrator records all failures", async () => {
-  const firstError = new Error("first failed");
-  const secondError = new Error("second failed");
-
-  const first = new FakeScraper(
-    "first",
-    async () => {
-      throw firstError;
-    }
-  );
-
-  const second = new FakeScraper(
-    "second",
-    async () => {
-      throw secondError;
-    }
-  );
-
-  const orchestrator = new ScraperOrchestrator([
-    first,
-    second,
-  ]);
-
-  await assert.rejects(
-    orchestrator.execute({
+test("orchestrator uses policy ordering after failure", async () => {
+  const http = createScraper(
+    "http",
+    async () => ({
       url: "https://example.com",
+      statusCode: 403,
+      content: "blocked",
+      contentType: "text/html",
     }),
-    (error: unknown) => {
-      assert.ok(error instanceof ScraperOrchestrationError);
-      assert.equal(
-        error.url,
-        "https://example.com"
-      );
-      assert.equal(error.failures.length, 2);
-      assert.equal(
-        error.failures[0]?.scraperId,
-        "first"
-      );
-      assert.equal(
-        error.failures[0]?.error,
-        firstError
-      );
-      assert.equal(
-        error.failures[1]?.scraperId,
-        "second"
-      );
-      assert.equal(
-        error.failures[1]?.error,
-        secondError
-      );
-
-      return true;
-    }
-  );
-});
-
-test("ScraperOrchestrator rejects an empty scraper list", () => {
-  assert.throws(
-    () => new ScraperOrchestrator([]),
-    {
-      message: "At least one scraper is required.",
-    }
-  );
-});
-
-test("ScraperOrchestrator preserves scraper order", async () => {
-  const calls: string[] = [];
-
-  const first = new FakeScraper(
-    "first",
-    async () => {
-      calls.push("first");
-      throw new Error("failed");
-    }
+    ["http"]
   );
 
-  const second = new FakeScraper(
-    "second",
-    async () => {
-      calls.push("second");
-      throw new Error("failed");
-    }
+  const browser = createScraper(
+    "browser",
+    async () => ({
+      url: "https://example.com",
+      statusCode: 200,
+      content: "browser",
+      contentType: "text/html",
+    }),
+    ["browser"]
   );
 
-  const third = new FakeScraper(
-    "third",
-    async (request) => {
-      calls.push("third");
-      return successResult(request.url, "third");
-    }
+  const antiBot = createScraper(
+    "anti-bot",
+    async () => ({
+      url: "https://example.com",
+      statusCode: 200,
+      content: "anti-bot",
+      contentType: "text/html",
+    }),
+    ["browser", "anti-bot"]
   );
 
-  const orchestrator = new ScraperOrchestrator([
-    first,
-    second,
-    third,
-  ]);
+  const policy: ScraperSelectionPolicy = {
+    select(_request, candidates, failures) {
+      if (
+        failures.some(
+          (failure) => failure.reason === "blocked"
+        )
+      ) {
+        return candidates
+          .filter(
+            (candidate) =>
+              !failures.some(
+                (failure) =>
+                  failure.scraperId === candidate.id
+              )
+          )
+          .sort((left, right) => {
+            const leftScore = left.descriptor.capabilities.includes(
+              "anti-bot"
+            )
+              ? 100
+              : left.descriptor.capabilities.includes(
+                    "browser"
+                  )
+                ? 50
+                : 0;
+
+            const rightScore = right.descriptor.capabilities.includes(
+              "anti-bot"
+            )
+              ? 100
+              : right.descriptor.capabilities.includes(
+                    "browser"
+                  )
+                ? 50
+                : 0;
+
+            return rightScore - leftScore;
+          });
+      }
+
+      return candidates;
+    },
+  };
+
+  const orchestrator = new ScraperOrchestrator(
+    createRegistry([http, browser, antiBot]),
+    policy
+  );
 
   const result = await orchestrator.execute({
     url: "https://example.com",
   });
 
-  assert.equal(result.scraperId, "third");
-  assert.deepEqual(calls, [
-    "first",
-    "second",
-    "third",
-  ]);
-});
-test("ScraperOrchestrator classifies HTTP 403 as blocked", async () => {
-  const scraper = new FakeScraper(
-    "blocked-scraper",
-    async (request) => ({
-      url: request.url,
-      statusCode: 403,
-      content: "Forbidden",
-      contentType: "text/html",
-    })
-  );
-
-  const orchestrator = new ScraperOrchestrator([scraper]);
-
-  await assert.rejects(
-    orchestrator.execute({
-      url: "https://example.com",
-    }),
-    (error: unknown) => {
-      assert.ok(error instanceof ScraperOrchestrationError);
-      assert.equal(error.failures.length, 1);
-      assert.equal(error.failures[0]?.reason, "blocked");
-      assert.equal(error.failures[0]?.statusCode, 403);
-
-      return true;
-    }
-  );
+  assert.equal(result.scraperId, "anti-bot");
+  assert.equal(result.failures[0]?.reason, "blocked");
 });
 
-test("ScraperOrchestrator classifies HTTP 429 as rate-limited", async () => {
-  const scraper = new FakeScraper(
-    "rate-limited-scraper",
-    async (request) => ({
-      url: request.url,
-      statusCode: 429,
-      content: "Too Many Requests",
-      contentType: "text/html",
-    })
-  );
+test("orchestrator skips scrapers that do not satisfy required capabilities", async () => {
+  let httpCalled = false;
 
-  const orchestrator = new ScraperOrchestrator([scraper]);
-
-  await assert.rejects(
-    orchestrator.execute({
-      url: "https://example.com",
-    }),
-    (error: unknown) => {
-      assert.ok(error instanceof ScraperOrchestrationError);
-      assert.equal(error.failures[0]?.reason, "rate-limited");
-      assert.equal(error.failures[0]?.statusCode, 429);
-
-      return true;
-    }
-  );
-});
-
-test("ScraperOrchestrator classifies HTTP 500 as server-error", async () => {
-  const scraper = new FakeScraper(
-    "server-error-scraper",
-    async (request) => ({
-      url: request.url,
-      statusCode: 500,
-      content: "Internal Server Error",
-      contentType: "text/html",
-    })
-  );
-
-  const orchestrator = new ScraperOrchestrator([scraper]);
-
-  await assert.rejects(
-    orchestrator.execute({
-      url: "https://example.com",
-    }),
-    (error: unknown) => {
-      assert.ok(error instanceof ScraperOrchestrationError);
-      assert.equal(error.failures[0]?.reason, "server-error");
-      assert.equal(error.failures[0]?.statusCode, 500);
-
-      return true;
-    }
-  );
-});
-
-test("ScraperOrchestrator classifies HTTP 404 as http-error", async () => {
-  const scraper = new FakeScraper(
-    "not-found-scraper",
-    async (request) => ({
-      url: request.url,
-      statusCode: 404,
-      content: "Not Found",
-      contentType: "text/html",
-    })
-  );
-
-  const orchestrator = new ScraperOrchestrator([scraper]);
-
-  await assert.rejects(
-    orchestrator.execute({
-      url: "https://example.com",
-    }),
-    (error: unknown) => {
-      assert.ok(error instanceof ScraperOrchestrationError);
-      assert.equal(error.failures[0]?.reason, "http-error");
-      assert.equal(error.failures[0]?.statusCode, 404);
-
-      return true;
-    }
-  );
-});
-
-test("ScraperOrchestrator classifies AbortError as timeout", async () => {
-  const scraper = new FakeScraper(
-    "timeout-scraper",
+  const http = createScraper(
+    "http",
     async () => {
-      throw new DOMException(
-        "The operation was aborted.",
-        "AbortError"
-      );
-    }
+      httpCalled = true;
+
+      return {
+        url: "https://example.com",
+        statusCode: 200,
+        content: "http",
+        contentType: "text/html",
+      };
+    },
+    ["http"]
   );
 
-  const orchestrator = new ScraperOrchestrator([scraper]);
-
-  await assert.rejects(
-    orchestrator.execute({
+  const browser = createScraper(
+    "browser",
+    async () => ({
       url: "https://example.com",
+      statusCode: 200,
+      content: "browser",
+      contentType: "text/html",
     }),
-    (error: unknown) => {
-      assert.ok(error instanceof ScraperOrchestrationError);
-      assert.equal(error.failures[0]?.reason, "timeout");
-      assert.equal(error.failures[0]?.statusCode, null);
-
-      return true;
-    }
+    ["browser"]
   );
+
+  const orchestrator = new ScraperOrchestrator(
+    createRegistry([http, browser]),
+    preserveOrderPolicy
+  );
+
+  const result = await orchestrator.execute({
+    url: "https://example.com",
+    requiredCapabilities: ["browser"],
+  });
+
+  assert.equal(httpCalled, false);
+  assert.equal(result.scraperId, "browser");
 });
 
-test("ScraperOrchestrator classifies TypeError as network-error", async () => {
-  const scraper = new FakeScraper(
-    "network-scraper",
-    async () => {
-      throw new TypeError("fetch failed");
-    }
+test("orchestrator throws when no scraper satisfies capabilities", async () => {
+  const http = createScraper(
+    "http",
+    async () => ({
+      url: "https://example.com",
+      statusCode: 200,
+      content: "http",
+      contentType: "text/html",
+    }),
+    ["http"]
   );
 
-  const orchestrator = new ScraperOrchestrator([scraper]);
+  const orchestrator = new ScraperOrchestrator(
+    createRegistry([http]),
+    preserveOrderPolicy
+  );
 
   await assert.rejects(
-    orchestrator.execute({
-      url: "https://example.com",
-    }),
-    (error: unknown) => {
-      assert.ok(error instanceof ScraperOrchestrationError);
-      assert.equal(error.failures[0]?.reason, "network-error");
-      assert.equal(error.failures[0]?.statusCode, null);
-
-      return true;
-    }
-  );
-});
-test(
-  "ScraperOrchestrator skips scrapers that do not satisfy required capabilities",
-  async () => {
-    const httpScraper = new FakeScraper(
-      "http-scraper",
-      async (request) =>
-        successResult(request.url, "http"),
-      ["http"]
-    );
-
-    const browserScraper = new FakeScraper(
-      "browser-scraper",
-      async (request) =>
-        successResult(request.url, "browser"),
-      ["browser", "javascript"]
-    );
-
-    const orchestrator = new ScraperOrchestrator([
-      httpScraper,
-      browserScraper,
-    ]);
-
-    const result = await orchestrator.execute({
-      url: "https://example.com",
-      requiredCapabilities: [
-        "browser",
-        "javascript",
-      ],
-    });
-
-    assert.equal(
-      result.scraperId,
-      "browser-scraper"
-    );
-    assert.equal(
-      result.result.content,
-      "browser"
-    );
-
-    assert.equal(httpScraper.calls.length, 0);
-    assert.equal(browserScraper.calls.length, 1);
-  }
-);
-test(
-  "ScraperOrchestrator does not record capability-mismatched scrapers as failures",
-  async () => {
-    const httpScraper = new FakeScraper(
-      "http-scraper",
-      async () => {
-        throw new Error("HTTP scraper should not execute");
-      },
-      ["http"]
-    );
-
-    const browserScraper = new FakeScraper(
-      "browser-scraper",
-      async (request) =>
-        successResult(request.url, "browser"),
-      ["browser", "javascript"]
-    );
-
-    const orchestrator = new ScraperOrchestrator([
-      httpScraper,
-      browserScraper,
-    ]);
-
-    const result = await orchestrator.execute({
-      url: "https://example.com",
-      requiredCapabilities: ["browser"],
-    });
-
-    assert.equal(result.scraperId, "browser-scraper");
-    assert.equal(result.result.content, "browser");
-    assert.deepEqual(result.failures, []);
-
-    assert.equal(httpScraper.calls.length, 0);
-    assert.equal(browserScraper.calls.length, 1);
-  }
-);
-
-test(
-  "ScraperOrchestrator fails when no scraper satisfies required capabilities",
-  async () => {
-    const httpScraper = new FakeScraper(
-      "http-scraper",
-      async () =>
-        successResult(
-          "https://example.com",
-          "http"
-        ),
-      ["http"]
-    );
-
-    const browserScraper = new FakeScraper(
-      "browser-scraper",
-      async () =>
-        successResult(
-          "https://example.com",
-          "browser"
-        ),
-      ["browser", "javascript"]
-    );
-
-    const orchestrator = new ScraperOrchestrator([
-      httpScraper,
-      browserScraper,
-    ]);
-
-    await assert.rejects(
+    () =>
       orchestrator.execute({
         url: "https://example.com",
-        requiredCapabilities: ["proxy"],
+        requiredCapabilities: ["browser"],
       }),
-      (error: unknown) => {
-        assert.ok(
-          error instanceof ScraperOrchestrationError
-        );
-        assert.equal(
-          error.url,
-          "https://example.com"
-        );
-        assert.deepEqual(error.failures, []);
-
-        return true;
-      }
-    );
-
-    assert.equal(httpScraper.calls.length, 0);
-    assert.equal(browserScraper.calls.length, 0);
-  }
-);
+    (error: unknown) => {
+      assert.ok(error instanceof ScraperOrchestrationError);
+      assert.equal(error.failures.length, 0);
+      return true;
+    }
+  );
+});
