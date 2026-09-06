@@ -1,6 +1,9 @@
-﻿import type { ScraperSelectionPolicy } from "./scraper-selection-policy.js";
-import type { ScraperFailure } from "./scraper-orchestrator.js";
-import type { ScrapeRequest, Scraper } from "./scraper.js";
+﻿import type { ScraperSelectionPolicy } from "../../../application/ports/scraper-selection-policy.js";
+import type { ScraperFailure } from "../../../application/ports/scraper-orchestrator.js";
+import type {
+  ScrapeRequest,
+  Scraper,
+} from "../../../application/ports/scraper.js";
 
 export class DefaultScraperSelectionPolicy
   implements ScraperSelectionPolicy
