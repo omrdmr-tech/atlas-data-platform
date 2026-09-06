@@ -11,10 +11,12 @@ import type {
 
 import type {
   ProxyTransport,
+  ProxyTransportResponse,
 } from "../../../application/ports/proxy-transport.js";
 
 export interface ProxyScraperOptions {
   readonly userAgent?: string;
+  readonly maxAttempts?: number;
 }
 
 export class ProxyScraper implements Scraper {
@@ -26,6 +28,7 @@ export class ProxyScraper implements Scraper {
   };
 
   private readonly userAgent: string;
+  private readonly maxAttempts: number;
 
   public constructor(
     private readonly proxyProvider: ProxyProvider,
@@ -35,6 +38,18 @@ export class ProxyScraper implements Scraper {
     this.userAgent =
       options.userAgent ??
       "AtlasProxyScraper/0.1";
+
+    this.maxAttempts =
+      options.maxAttempts ?? 3;
+
+    if (
+      !Number.isInteger(this.maxAttempts) ||
+      this.maxAttempts < 1
+    ) {
+      throw new Error(
+        "Maximum proxy attempts must be a positive integer."
+      );
+    }
   }
 
   public async execute(
@@ -51,70 +66,122 @@ export class ProxyScraper implements Scraper {
       );
     }
 
-    const proxy = await this.proxyProvider.acquire();
+    let lastError: unknown = null;
+    let lastResponse: ProxyTransportResponse | null = null;
 
-    if (!proxy) {
-      throw new Error(
-        "No available proxy is configured."
-      );
-    }
+    for (
+      let attempt = 0;
+      attempt < this.maxAttempts;
+      attempt++
+    ) {
+      const proxy =
+        await this.proxyProvider.acquire();
 
-    try {
-      const response =
-        await this.proxyTransport.execute({
-          url: request.url,
-          proxy,
-          init: {
-            method: "GET",
-            headers: {
-              "User-Agent": this.userAgent,
-            },
-          },
-        });
-
-      if (
-        response.statusCode >= 200 &&
-        response.statusCode < 300
-      ) {
-        await this.proxyProvider.reportSuccess(
-          proxy.id
-        );
-
-        return {
-          url: response.url,
-          statusCode: response.statusCode,
-          content: response.content,
-          contentType: response.contentType,
-        };
+      if (!proxy) {
+        break;
       }
 
-      const reason =
-        classifyHttpStatus(
-          response.statusCode
+      try {
+        const response =
+          await this.proxyTransport.execute({
+            url: request.url,
+            proxy,
+            init: {
+              method: "GET",
+              headers: {
+                "User-Agent": this.userAgent,
+              },
+            },
+          });
+
+        lastResponse = response;
+
+        if (
+          response.statusCode >= 200 &&
+          response.statusCode < 300
+        ) {
+          await this.proxyProvider.reportSuccess(
+            proxy.id
+          );
+
+          return {
+            url: response.url,
+            statusCode: response.statusCode,
+            content: response.content,
+            contentType: response.contentType,
+          };
+        }
+
+        const reason =
+          classifyHttpStatus(
+            response.statusCode
+          );
+
+        await this.proxyProvider.reportFailure(
+          proxy.id,
+          reason
         );
 
-      await this.proxyProvider.reportFailure(
-        proxy.id,
-        reason
-      );
+        if (
+          !shouldRetry(reason) ||
+          attempt === this.maxAttempts - 1
+        ) {
+          return {
+            url: response.url,
+            statusCode: response.statusCode,
+            content: response.content,
+            contentType: response.contentType,
+          };
+        }
+      } catch (error) {
+        lastError = error;
 
-      return {
-        url: response.url,
-        statusCode: response.statusCode,
-        content: response.content,
-        contentType: response.contentType,
-      };
-    } catch (error) {
-      const reason = classifyError(error);
+        const reason =
+          classifyError(error);
 
-      await this.proxyProvider.reportFailure(
-        proxy.id,
-        reason
-      );
+        await this.proxyProvider.reportFailure(
+          proxy.id,
+          reason
+        );
 
-      throw error;
+        if (
+          !shouldRetry(reason) ||
+          attempt === this.maxAttempts - 1
+        ) {
+          throw error;
+        }
+      }
     }
+
+    if (lastResponse) {
+      return {
+        url: lastResponse.url,
+        statusCode: lastResponse.statusCode,
+        content: lastResponse.content,
+        contentType: lastResponse.contentType,
+      };
+    }
+
+    if (lastError) {
+      throw lastError;
+    }
+
+    throw new Error(
+      "No available proxy is configured."
+    );
   }
+}
+
+function shouldRetry(
+  reason: ProxyFailureReason
+): boolean {
+  return (
+    reason === "blocked" ||
+    reason === "rate-limited" ||
+    reason === "server-error" ||
+    reason === "timeout" ||
+    reason === "network-error"
+  );
 }
 
 function classifyHttpStatus(

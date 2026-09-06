@@ -1,4 +1,4 @@
-﻿import { test } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import type {
@@ -588,6 +588,9 @@ test("all scraper failures are preserved across HTTP Browser and Proxy", async (
               "text/plain",
           };
         },
+      },
+      {
+        maxAttempts: 1,
       }
     );
 

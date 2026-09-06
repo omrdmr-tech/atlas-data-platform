@@ -8,21 +8,40 @@ interface ProxyState {
   readonly endpoint: ProxyEndpoint;
   failures: number;
   successes: number;
-  available: boolean;
+  cooldownUntil: number | null;
+}
+
+export interface InMemoryProxyProviderOptions {
+  readonly cooldownMs?: number;
+  readonly now?: () => number;
 }
 
 export class InMemoryProxyProvider
   implements ProxyProvider
 {
   private readonly proxies: ProxyState[] = [];
+  private readonly cooldownMs: number;
+  private readonly now: () => number;
+
   private nextIndex = 0;
 
   public constructor(
-    proxies: readonly ProxyEndpoint[]
+    proxies: readonly ProxyEndpoint[],
+    options: InMemoryProxyProviderOptions = {}
   ) {
     if (proxies.length === 0) {
       throw new Error(
         "At least one proxy is required."
+      );
+    }
+
+    if (
+      options.cooldownMs !== undefined &&
+      (!Number.isFinite(options.cooldownMs) ||
+        options.cooldownMs < 0)
+    ) {
+      throw new Error(
+        "Cooldown duration must be a non-negative finite number."
       );
     }
 
@@ -41,9 +60,14 @@ export class InMemoryProxyProvider
         endpoint: proxy,
         failures: 0,
         successes: 0,
-        available: true,
+        cooldownUntil: null,
       });
     }
+
+    this.cooldownMs =
+      options.cooldownMs ?? 30_000;
+
+    this.now = options.now ?? Date.now;
   }
 
   public async acquire(): Promise<ProxyEndpoint | null> {
@@ -51,16 +75,24 @@ export class InMemoryProxyProvider
       return null;
     }
 
-    for (let offset = 0; offset < this.proxies.length; offset++) {
+    const now = this.now();
+
+    for (
+      let offset = 0;
+      offset < this.proxies.length;
+      offset++
+    ) {
       const index =
         (this.nextIndex + offset) %
         this.proxies.length;
 
       const proxy = this.proxies[index];
 
-      if (!proxy.available) {
+      if (!this.isAvailable(proxy, now)) {
         continue;
       }
+
+      proxy.cooldownUntil = null;
 
       this.nextIndex =
         (index + 1) % this.proxies.length;
@@ -77,7 +109,8 @@ export class InMemoryProxyProvider
     const proxy = this.findProxy(proxyId);
 
     proxy.successes++;
-    proxy.available = true;
+    proxy.failures = 0;
+    proxy.cooldownUntil = null;
   }
 
   public async reportFailure(
@@ -88,14 +121,26 @@ export class InMemoryProxyProvider
 
     proxy.failures++;
 
-    if (
-      reason === "blocked" ||
-      reason === "rate-limited" ||
-      reason === "network-error" ||
-      reason === "timeout"
-    ) {
-      proxy.available = false;
+    if (shouldCooldown(reason)) {
+      proxy.cooldownUntil =
+        this.now() + this.cooldownMs;
     }
+  }
+
+  private isAvailable(
+    proxy: ProxyState,
+    now: number
+  ): boolean {
+    if (proxy.cooldownUntil === null) {
+      return true;
+    }
+
+    if (now >= proxy.cooldownUntil) {
+      proxy.cooldownUntil = null;
+      return true;
+    }
+
+    return false;
   }
 
   private findProxy(
@@ -116,3 +161,13 @@ export class InMemoryProxyProvider
   }
 }
 
+function shouldCooldown(
+  reason: ProxyFailureReason
+): boolean {
+  return (
+    reason === "blocked" ||
+    reason === "rate-limited" ||
+    reason === "network-error" ||
+    reason === "timeout"
+  );
+}
