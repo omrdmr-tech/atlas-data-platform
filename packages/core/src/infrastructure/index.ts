@@ -32,3 +32,5 @@ export * from "./adapters/scraper/http-scraper.js";
 export * from "./adapters/scraper/default-scraper-selection-policy.js";
 export * from "./adapters/scraper/browser-scraper.js";
 
+export * from "./adapters/scraper/in-memory-proxy-provider.js";
+export * from "./adapters/scraper/proxy-scraper.js";
