@@ -44,7 +44,7 @@ export class ScraperOrchestrator
     selectionPolicy: ScraperSelectionPolicy =
       new DefaultScraperSelectionPolicy()
   ) {
-    if (Array.isArray(scrapersOrRegistry)) {
+    if (isScraperArray(scrapersOrRegistry)) {
       if (scrapersOrRegistry.length === 0) {
         throw new Error("At least one scraper is required.");
       }
@@ -184,4 +184,10 @@ export class ScraperOrchestrationError extends Error {
     this.url = url;
     this.failures = [...failures];
   }
+}
+
+function isScraperArray(
+  value: readonly Scraper[] | ScraperRegistry
+): value is readonly Scraper[] {
+  return Array.isArray(value);
 }
