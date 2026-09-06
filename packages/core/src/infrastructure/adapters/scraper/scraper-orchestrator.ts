@@ -18,6 +18,9 @@ import type {
   ScraperSelectionPolicy,
 } from "../../../application/ports/scraper-selection-policy.js";
 
+import { ScraperRegistry as DefaultScraperRegistry } from "./scraper-registry.js";
+import { DefaultScraperSelectionPolicy } from "./default-scraper-selection-policy.js";
+
 export class ScraperOrchestrator
   implements ScraperOrchestratorPort
 {
@@ -25,10 +28,42 @@ export class ScraperOrchestrator
   private readonly selectionPolicy: ScraperSelectionPolicy;
 
   public constructor(
+    scrapers: readonly Scraper[],
+    selectionPolicy?: ScraperSelectionPolicy
+  );
+
+  public constructor(
     registry: ScraperRegistry,
-    selectionPolicy: ScraperSelectionPolicy
+    selectionPolicy?: ScraperSelectionPolicy
+  );
+
+  public constructor(
+    scrapersOrRegistry:
+      | readonly Scraper[]
+      | ScraperRegistry,
+    selectionPolicy: ScraperSelectionPolicy =
+      new DefaultScraperSelectionPolicy()
   ) {
-    this.registry = registry;
+    if (Array.isArray(scrapersOrRegistry)) {
+      if (scrapersOrRegistry.length === 0) {
+        throw new Error("At least one scraper is required.");
+      }
+
+      const registry = new DefaultScraperRegistry();
+
+      for (const scraper of scrapersOrRegistry) {
+        registry.register(scraper);
+      }
+
+      this.registry = registry;
+    } else {
+      this.registry = scrapersOrRegistry;
+
+      if (this.registry.getAll().length === 0) {
+        throw new Error("At least one scraper is required.");
+      }
+    }
+
     this.selectionPolicy = selectionPolicy;
   }
 
@@ -37,18 +72,9 @@ export class ScraperOrchestrator
   ): Promise<ScraperOrchestrationResult> {
     const failures: ScraperFailure[] = [];
 
-    const requiredCapabilities =
-      request.requiredCapabilities ?? [];
-
-    const candidates =
-      this.registry.findByCapabilities(requiredCapabilities);
-
-    if (candidates.length === 0) {
-      throw new ScraperOrchestrationError(
-        request.url,
-        failures
-      );
-    }
+    const candidates = this.registry.findByCapabilities(
+      request.requiredCapabilities ?? []
+    );
 
     let remaining = this.selectionPolicy.select(
       request,

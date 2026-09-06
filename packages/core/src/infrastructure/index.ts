@@ -1,4 +1,4 @@
-export interface InfrastructureModule {
+﻿export interface InfrastructureModule {
   readonly name: string;
   initialize(): Promise<void>;
   shutdown(): Promise<void>;
@@ -29,6 +29,5 @@ export * from "./ports/outbox-publisher.js";
 export * from "./adapters/event-bus/outbox-event-publisher.js";
 export * from "./infrastructure-runtime.js";
 export * from "./adapters/scraper/http-scraper.js";
-export * from "./adapters/scraper/scraper-registry.js";
-export * from "./adapters/scraper/scraper-orchestrator.js";
 export * from "./adapters/scraper/default-scraper-selection-policy.js";
+
