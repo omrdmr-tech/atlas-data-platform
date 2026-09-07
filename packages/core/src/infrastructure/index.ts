@@ -39,3 +39,8 @@ export * from "./adapters/scraper/content-access-detector.js";
 export * from "./adapters/logging/in-memory-process-log.js";
 export * from "./adapters/logging/in-memory-source-access-log.js";
 export * from "./adapters/logging/system-request-id-generator.js";
+export {
+  InMemorySourceHealthStore,
+} from "./adapters/scraper/in-memory-source-health-store.js";
+export * from "./adapters/logging/health-aware-source-access-log.js";
+export * from "./adapters/scraper/adaptive-scraper-selection-policy.js";
