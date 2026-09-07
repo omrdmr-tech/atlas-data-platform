@@ -6,6 +6,8 @@ import type {
 export interface ScrapeRequest {
   readonly url: string;
   readonly requiredCapabilities?: readonly ScraperCapability[];
+  readonly requestId?: string;
+  readonly sourceId?: string;
 }
 
 export interface ScrapeResult {

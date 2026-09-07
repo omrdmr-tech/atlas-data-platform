@@ -7,6 +7,7 @@
 
 import type {
   ScrapeRequest,
+  ScrapeResult,
   Scraper,
 } from "../../../application/ports/scraper.js";
 
@@ -18,23 +19,74 @@ import type {
   ScraperSelectionPolicy,
 } from "../../../application/ports/scraper-selection-policy.js";
 
-import { ScraperRegistry as DefaultScraperRegistry } from "./scraper-registry.js";
-import { DefaultScraperSelectionPolicy } from "./default-scraper-selection-policy.js";
+import type {
+  ProcessLog,
+} from "../../../application/ports/process-log.js";
+
+import type {
+  SourceAccessDetector,
+  SourceAccessType,
+} from "../../../application/ports/source-access-detector.js";
+
+import type {
+  SourceAccessLog,
+} from "../../../application/ports/source-access-log.js";
+
+import {
+  resolveRequestId,
+  resolveSourceId,
+  isSuccessfulHttpResponse,
+} from "../../../application/ports/scrape-execution.js";
+
+import type {
+  RequestIdGenerator,
+} from "../../../application/ports/scrape-execution.js";
+
+import {
+  ScraperRegistry as DefaultScraperRegistry,
+} from "./scraper-registry.js";
+
+import {
+  DefaultScraperSelectionPolicy,
+} from "./default-scraper-selection-policy.js";
+
+import {
+  ContentAccessDetector,
+} from "./content-access-detector.js";
+
+import {
+  SystemRequestIdGenerator,
+} from "../logging/system-request-id-generator.js";
+
+export interface ScraperOrchestratorOptions {
+  readonly processLog?: ProcessLog;
+  readonly sourceAccessLog?: SourceAccessLog;
+  readonly accessDetector?: SourceAccessDetector;
+  readonly requestIdGenerator?: RequestIdGenerator;
+  readonly now?: () => Date;
+}
 
 export class ScraperOrchestrator
   implements ScraperOrchestratorPort
 {
   private readonly registry: ScraperRegistry;
   private readonly selectionPolicy: ScraperSelectionPolicy;
+  private readonly processLog?: ProcessLog;
+  private readonly sourceAccessLog?: SourceAccessLog;
+  private readonly accessDetector: SourceAccessDetector;
+  private readonly requestIdGenerator: RequestIdGenerator;
+  private readonly now: () => Date;
 
   public constructor(
     scrapers: readonly Scraper[],
-    selectionPolicy?: ScraperSelectionPolicy
+    selectionPolicy?: ScraperSelectionPolicy,
+    options?: ScraperOrchestratorOptions
   );
 
   public constructor(
     registry: ScraperRegistry,
-    selectionPolicy?: ScraperSelectionPolicy
+    selectionPolicy?: ScraperSelectionPolicy,
+    options?: ScraperOrchestratorOptions
   );
 
   public constructor(
@@ -42,7 +94,8 @@ export class ScraperOrchestrator
       | readonly Scraper[]
       | ScraperRegistry,
     selectionPolicy: ScraperSelectionPolicy =
-      new DefaultScraperSelectionPolicy()
+      new DefaultScraperSelectionPolicy(),
+    options: ScraperOrchestratorOptions = {}
   ) {
     if (isScraperArray(scrapersOrRegistry)) {
       if (scrapersOrRegistry.length === 0) {
@@ -65,12 +118,28 @@ export class ScraperOrchestrator
     }
 
     this.selectionPolicy = selectionPolicy;
+    this.processLog = options.processLog;
+    this.sourceAccessLog = options.sourceAccessLog;
+    this.accessDetector =
+      options.accessDetector ??
+      new ContentAccessDetector();
+    this.requestIdGenerator =
+      options.requestIdGenerator ??
+      new SystemRequestIdGenerator();
+    this.now = options.now ?? (() => new Date());
   }
 
   public async execute(
     request: ScrapeRequest
   ): Promise<ScraperOrchestrationResult> {
     const failures: ScraperFailure[] = [];
+
+    const requestId = resolveRequestId(
+      request,
+      this.requestIdGenerator
+    );
+
+    const sourceId = resolveSourceId(request);
 
     const candidates = this.registry.findByCapabilities(
       request.requiredCapabilities ?? []
@@ -82,13 +151,58 @@ export class ScraperOrchestrator
       failures
     );
 
+    let attempt = 0;
+
     while (remaining.length > 0) {
       const scraper = remaining[0];
+      attempt++;
+
+      const startedAt = this.now();
 
       try {
         const result = await scraper.execute(request);
 
-        if (result.statusCode >= 200 && result.statusCode < 300) {
+        const accessType = resolveAccessType(scraper);
+
+        const access = this.accessDetector.detect(
+          result,
+          accessType
+        );
+
+        await this.sourceAccessLog?.append({
+          requestId,
+          sourceId,
+          url: request.url,
+          domain: new URL(request.url).hostname.toLowerCase(),
+          accessStatus: access.status,
+          accessType: access.accessType,
+          detectedAt: this.now().toISOString(),
+          scraperId: scraper.id,
+          httpStatus: result.statusCode,
+          requiresLogin: access.requiresLogin,
+          requiresSubscription:
+            access.requiresSubscription,
+          paywallDetected: access.paywallDetected,
+          captchaDetected: access.captchaDetected,
+          contentAvailable:
+            access.contentAvailable,
+        });
+
+        if (
+          isSuccessfulHttpResponse(result) &&
+          access.contentAvailable
+        ) {
+          await this.writeProcessLog({
+            requestId,
+            sourceId,
+            url: request.url,
+            startedAt,
+            scraperId: scraper.id,
+            attempt,
+            status: "success",
+            fallbackUsed: attempt > 1,
+          });
+
           return {
             result,
             scraperId: scraper.id,
@@ -96,20 +210,74 @@ export class ScraperOrchestrator
           };
         }
 
+        const reason =
+          isSuccessfulHttpResponse(result)
+            ? "blocked"
+            : classifyHttpStatus(result.statusCode);
+
+        const error = new Error(
+          isSuccessfulHttpResponse(result)
+            ? `Source access status: ${access.status}.`
+            : `Scraper returned HTTP ${result.statusCode}.`
+        );
+
         failures.push({
           scraperId: scraper.id,
-          reason: classifyHttpStatus(result.statusCode),
+          reason,
           statusCode: result.statusCode,
-          error: new Error(
-            `Scraper returned HTTP ${result.statusCode}.`
-          ),
+          error,
+        });
+
+        await this.writeProcessLog({
+          requestId,
+          sourceId,
+          url: request.url,
+          startedAt,
+          scraperId: scraper.id,
+          attempt,
+          status: "failed",
+          failureReason: reason,
+          fallbackUsed: attempt > 1,
+          error: error.message,
         });
       } catch (error) {
+        const reason = classifyError(error);
+
+        await this.sourceAccessLog?.append({
+          requestId,
+          sourceId,
+          url: request.url,
+          domain: new URL(request.url).hostname.toLowerCase(),
+          accessStatus: mapFailureToAccessStatus(reason),
+          accessType: resolveAccessType(scraper),
+          detectedAt: this.now().toISOString(),
+          scraperId: scraper.id,
+          httpStatus: null,
+          requiresLogin: false,
+          requiresSubscription: false,
+          paywallDetected: false,
+          captchaDetected: false,
+          contentAvailable: false,
+        });
+
         failures.push({
           scraperId: scraper.id,
-          reason: classifyError(error),
+          reason,
           statusCode: null,
           error,
+        });
+
+        await this.writeProcessLog({
+          requestId,
+          sourceId,
+          url: request.url,
+          startedAt,
+          scraperId: scraper.id,
+          attempt,
+          status: "failed",
+          failureReason: reason,
+          fallbackUsed: attempt > 1,
+          error: stringifyError(error),
         });
       }
 
@@ -124,6 +292,44 @@ export class ScraperOrchestrator
       request.url,
       failures
     );
+  }
+
+  private async writeProcessLog(
+    input: {
+      readonly requestId: string;
+      readonly sourceId: string;
+      readonly url: string;
+      readonly startedAt: Date;
+      readonly scraperId: string;
+      readonly attempt: number;
+      readonly status: "success" | "failed";
+      readonly failureReason?: ScraperFailureReason;
+      readonly fallbackUsed: boolean;
+      readonly error?: string;
+    }
+  ): Promise<void> {
+    if (!this.processLog) {
+      return;
+    }
+
+    const completedAt = this.now();
+
+    await this.processLog.append({
+      requestId: input.requestId,
+      sourceId: input.sourceId,
+      url: input.url,
+      startedAt: input.startedAt.toISOString(),
+      completedAt: completedAt.toISOString(),
+      scraperId: input.scraperId,
+      attempt: input.attempt,
+      durationMs:
+        completedAt.getTime() -
+        input.startedAt.getTime(),
+      status: input.status,
+      failureReason: input.failureReason,
+      fallbackUsed: input.fallbackUsed,
+      error: input.error,
+    });
   }
 }
 
@@ -153,8 +359,11 @@ function classifyHttpStatus(
   return "unknown";
 }
 
-function classifyError(error: unknown): ScraperFailureReason {
+function classifyError(
+  error: unknown
+): ScraperFailureReason {
   if (
+    typeof DOMException !== "undefined" &&
     error instanceof DOMException &&
     error.name === "AbortError"
   ) {
@@ -166,6 +375,56 @@ function classifyError(error: unknown): ScraperFailureReason {
   }
 
   return "unknown";
+}
+
+function mapFailureToAccessStatus(
+  reason: ScraperFailureReason
+) {
+  switch (reason) {
+    case "rate-limited":
+      return "rate-limited" as const;
+
+    case "timeout":
+    case "network-error":
+      return "network-unavailable" as const;
+
+    case "server-error":
+      return "server-error" as const;
+
+    case "blocked":
+      return "bot-blocked" as const;
+
+    default:
+      return "unknown" as const;
+  }
+}
+
+function resolveAccessType(
+  scraper: Scraper
+): SourceAccessType {
+  const capabilities = scraper.descriptor.capabilities;
+
+  if (capabilities.includes("proxy")) {
+    return "proxy";
+  }
+
+  if (capabilities.includes("browser")) {
+    return "browser";
+  }
+
+  if (capabilities.includes("http")) {
+    return "http";
+  }
+
+  return "unknown";
+}
+
+function stringifyError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return String(error);
 }
 
 export class ScraperOrchestrationError extends Error {

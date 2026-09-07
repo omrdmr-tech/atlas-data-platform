@@ -34,3 +34,8 @@ export * from "./adapters/scraper/browser-scraper.js";
 
 export * from "./adapters/scraper/in-memory-proxy-provider.js";
 export * from "./adapters/scraper/proxy-scraper.js";
+
+export * from "./adapters/scraper/content-access-detector.js";
+export * from "./adapters/logging/in-memory-process-log.js";
+export * from "./adapters/logging/in-memory-source-access-log.js";
+export * from "./adapters/logging/system-request-id-generator.js";
