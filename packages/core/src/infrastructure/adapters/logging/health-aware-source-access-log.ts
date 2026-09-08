@@ -20,7 +20,7 @@ export class HealthAwareSourceAccessLog
   ): Promise<void> {
     await this.delegate.append(entry);
 
-    this.healthStore.recordAccess({
+    await this.healthStore.recordAccess({
       sourceId: entry.sourceId,
       domain: entry.domain,
       scraperId: entry.scraperId,

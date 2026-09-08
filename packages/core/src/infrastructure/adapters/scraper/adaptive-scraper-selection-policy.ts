@@ -49,12 +49,12 @@ export class AdaptiveScraperSelectionPolicy
     this.failureWeight = options.failureWeight ?? 100;
   }
 
-  public select(
+  public async select(
     request: ScrapeRequest,
     candidates: readonly Scraper[],
     failures: readonly ScraperFailure[]
-  ): readonly Scraper[] {
-    const baseline = this.basePolicy.select(
+  ): Promise<readonly Scraper[]> {
+    const baseline = await this.basePolicy.select(
       request,
       candidates,
       failures
@@ -65,7 +65,7 @@ export class AdaptiveScraperSelectionPolicy
     }
 
     const sourceId = resolveSourceId(request);
-    const health = this.healthStore.get(sourceId);
+    const health = await this.healthStore.get(sourceId);
 
     if (!health) {
       return baseline;

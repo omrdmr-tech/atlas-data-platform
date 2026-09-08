@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   SourceAccessStatus,
   SourceAccessType,
 } from "./source-access-detector.js";
@@ -49,13 +49,13 @@ export interface SourceScraperHealth {
 }
 
 export interface SourceHealthStore {
-  recordAccess(input: SourceHealthAccessRecord): void;
+  recordAccess(input: SourceHealthAccessRecord): Promise<void>;
 
-  get(sourceId: string): SourceHealthSnapshot | null;
+  get(sourceId: string): Promise<SourceHealthSnapshot | null>;
 
-  getByDomain(domain: string): SourceHealthSnapshot | null;
+  getByDomain(domain: string): Promise<SourceHealthSnapshot | null>;
 
-  getAll(): readonly SourceHealthSnapshot[];
+  getAll(): Promise<readonly SourceHealthSnapshot[]>;
 }
 
 export interface SourceHealthAccessRecord {

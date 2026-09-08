@@ -1,4 +1,4 @@
-﻿export interface InfrastructureModule {
+export interface InfrastructureModule {
   readonly name: string;
   initialize(): Promise<void>;
   shutdown(): Promise<void>;
@@ -44,3 +44,4 @@ export {
 } from "./adapters/scraper/in-memory-source-health-store.js";
 export * from "./adapters/logging/health-aware-source-access-log.js";
 export * from "./adapters/scraper/adaptive-scraper-selection-policy.js";
+export * from "./adapters/postgresql/postgresql-source-health-store.js";

@@ -1,4 +1,4 @@
-﻿import test from "node:test";
+import test from "node:test";
 import assert from "node:assert/strict";
 
 import type {
@@ -50,7 +50,7 @@ function failure(
   };
 }
 
-test("selection policy preserves registration order on first attempt", () => {
+test("selection policy preserves registration order on first attempt", async () => {
   const policy = new DefaultScraperSelectionPolicy();
 
   const candidates = [
@@ -59,7 +59,7 @@ test("selection policy preserves registration order on first attempt", () => {
     scraper("proxy", ["http", "proxy"]),
   ];
 
-  const selected = policy.select(request(), candidates, []);
+  const selected = await policy.select(request(), candidates, []);
 
   assert.deepEqual(
     selected.map((item) => item.id),
@@ -67,7 +67,7 @@ test("selection policy preserves registration order on first attempt", () => {
   );
 });
 
-test("blocked failure prioritizes anti-bot and browser scrapers", () => {
+test("blocked failure prioritizes anti-bot and browser scrapers", async () => {
   const policy = new DefaultScraperSelectionPolicy();
 
   const candidates = [
@@ -76,7 +76,7 @@ test("blocked failure prioritizes anti-bot and browser scrapers", () => {
     scraper("anti-bot", ["browser", "anti-bot"]),
   ];
 
-  const selected = policy.select(
+  const selected = await policy.select(
     request(),
     candidates,
     [failure("plain-http", "blocked")]
@@ -88,7 +88,7 @@ test("blocked failure prioritizes anti-bot and browser scrapers", () => {
   );
 });
 
-test("rate limiting prioritizes proxy capable scrapers", () => {
+test("rate limiting prioritizes proxy capable scrapers", async () => {
   const policy = new DefaultScraperSelectionPolicy();
 
   const candidates = [
@@ -97,7 +97,7 @@ test("rate limiting prioritizes proxy capable scrapers", () => {
     scraper("anti-bot", ["browser", "anti-bot"]),
   ];
 
-  const selected = policy.select(
+  const selected = await policy.select(
     request(),
     candidates,
     [failure("browser", "rate-limited")]
@@ -106,7 +106,7 @@ test("rate limiting prioritizes proxy capable scrapers", () => {
   assert.equal(selected[0]?.id, "proxy");
 });
 
-test("failed scrapers are excluded from future selections", () => {
+test("failed scrapers are excluded from future selections", async () => {
   const policy = new DefaultScraperSelectionPolicy();
 
   const candidates = [
@@ -115,7 +115,7 @@ test("failed scrapers are excluded from future selections", () => {
     scraper("proxy", ["proxy"]),
   ];
 
-  const selected = policy.select(
+  const selected = await policy.select(
     request(),
     candidates,
     [
@@ -130,7 +130,7 @@ test("failed scrapers are excluded from future selections", () => {
   );
 });
 
-test("required capabilities contribute to selection score", () => {
+test("required capabilities contribute to selection score", async () => {
   const policy = new DefaultScraperSelectionPolicy();
 
   const candidates = [
@@ -138,7 +138,7 @@ test("required capabilities contribute to selection score", () => {
     scraper("anti-bot", ["browser", "anti-bot"]),
   ];
 
-  const selected = policy.select(
+  const selected = await policy.select(
     {
       url: "https://example.com",
       requiredCapabilities: ["anti-bot"],

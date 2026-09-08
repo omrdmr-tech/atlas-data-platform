@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   SourceAccessStatus,
   SourceAccessType,
 } from "../../../application/ports/source-access-detector.js";
@@ -58,9 +58,7 @@ export class InMemorySourceHealthStore
     MutableSourceHealth
   >();
 
-  public recordAccess(
-    input: SourceHealthAccessRecord
-  ): void {
+  public async recordAccess(input: SourceHealthAccessRecord): Promise<void> {
     const source = this.getOrCreateSource(input);
 
     source.totalAttempts++;
@@ -100,9 +98,7 @@ export class InMemorySourceHealthStore
     scraper.lastAttemptAt = input.occurredAt;
   }
 
-  public get(
-    sourceId: string
-  ): SourceHealthSnapshot | null {
+  public async get(sourceId: string): Promise<SourceHealthSnapshot | null> {
     const source = this.sources.get(sourceId);
 
     if (!source) {
@@ -112,9 +108,7 @@ export class InMemorySourceHealthStore
     return toSnapshot(source);
   }
 
-  public getByDomain(
-    domain: string
-  ): SourceHealthSnapshot | null {
+  public async getByDomain(domain: string): Promise<SourceHealthSnapshot | null> {
     const normalizedDomain = normalizeDomain(domain);
 
     for (const source of this.sources.values()) {
@@ -126,7 +120,7 @@ export class InMemorySourceHealthStore
     return null;
   }
 
-  public getAll(): readonly SourceHealthSnapshot[] {
+  public async getAll(): Promise<readonly SourceHealthSnapshot[]> {
     return [...this.sources.values()]
       .map(toSnapshot);
   }

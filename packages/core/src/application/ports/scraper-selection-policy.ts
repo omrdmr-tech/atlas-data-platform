@@ -1,4 +1,4 @@
-﻿import type { ScrapeRequest, Scraper } from "./scraper.js";
+import type { ScrapeRequest, Scraper } from "./scraper.js";
 import type { ScraperFailure } from "./scraper-orchestrator.js";
 
 export interface ScraperSelectionPolicy {
@@ -6,5 +6,5 @@ export interface ScraperSelectionPolicy {
     request: ScrapeRequest,
     candidates: readonly Scraper[],
     failures: readonly ScraperFailure[]
-  ): readonly Scraper[];
+  ): Promise<readonly Scraper[]>;
 }

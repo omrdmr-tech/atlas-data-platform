@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { Scraper } from "../../../application/ports/scraper.js";
@@ -113,7 +113,7 @@ test("orchestrator learns successful scraper preference across requests", async 
   assert.equal(httpCalls, 1);
   assert.equal(browserCalls, 1);
 
-  const firstHealth = healthStore.get("example.com");
+  const firstHealth = await healthStore.get("example.com");
 
   assert.ok(firstHealth);
   assert.equal(firstHealth.totalAttempts, 2);
@@ -131,7 +131,7 @@ test("orchestrator learns successful scraper preference across requests", async 
   assert.equal(httpCalls, 1);
   assert.equal(browserCalls, 2);
 
-  const secondHealth = healthStore.get("example.com");
+  const secondHealth = await healthStore.get("example.com");
 
   assert.ok(secondHealth);
   assert.equal(secondHealth.totalAttempts, 3);
@@ -158,7 +158,7 @@ test("adaptive preference remains source-specific", async () => {
   );
 
   for (let i = 0; i < 2; i += 1) {
-    healthStore.recordAccess({
+    await healthStore.recordAccess({
       sourceId: "example.com",
       domain: "example.com",
       scraperId: "browser",
@@ -168,7 +168,7 @@ test("adaptive preference remains source-specific", async () => {
       occurredAt: new Date(1000 + i).toISOString(),
     });
 
-    healthStore.recordAccess({
+    await healthStore.recordAccess({
       sourceId: "example.com",
       domain: "example.com",
       scraperId: "http",
@@ -238,7 +238,7 @@ test("adaptive policy still respects current-request failures", async () => {
   );
 
   for (let i = 0; i < 2; i += 1) {
-    healthStore.recordAccess({
+    await healthStore.recordAccess({
       sourceId: "example.com",
       domain: "example.com",
       scraperId: "http",
@@ -299,7 +299,7 @@ test("adaptive policy still respects current-request failures", async () => {
   assert.equal(httpCalls, 1);
   assert.equal(browserCalls, 1);
 
-  const health = healthStore.get("example.com");
+  const health = await healthStore.get("example.com");
 
   assert.ok(health);
 

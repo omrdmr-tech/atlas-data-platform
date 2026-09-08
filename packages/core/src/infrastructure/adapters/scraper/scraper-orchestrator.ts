@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   ScraperFailure,
   ScraperFailureReason,
   ScraperOrchestrationResult,
@@ -145,7 +145,7 @@ export class ScraperOrchestrator
       request.requiredCapabilities ?? []
     );
 
-    let remaining = this.selectionPolicy.select(
+    let remaining = await this.selectionPolicy.select(
       request,
       candidates,
       failures
@@ -281,7 +281,7 @@ export class ScraperOrchestrator
         });
       }
 
-      remaining = this.selectionPolicy.select(
+      remaining = await this.selectionPolicy.select(
         request,
         candidates,
         failures

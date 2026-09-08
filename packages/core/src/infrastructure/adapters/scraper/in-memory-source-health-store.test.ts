@@ -5,7 +5,7 @@ import {
   InMemorySourceHealthStore,
 } from "./in-memory-source-health-store.js";
 
-test("source health aggregates successful and failed attempts", () => {
+test("source health aggregates successful and failed attempts", async () => {
   const store = new InMemorySourceHealthStore();
 
   store.recordAccess({
@@ -28,7 +28,7 @@ test("source health aggregates successful and failed attempts", () => {
     occurredAt: "2026-09-07T10:01:00.000Z",
   });
 
-  const snapshot = store.get("source-1");
+  const snapshot = await store.get("source-1");
 
   assert.ok(snapshot);
   assert.equal(snapshot.domain, "example.com");
@@ -40,7 +40,7 @@ test("source health aggregates successful and failed attempts", () => {
   assert.equal(snapshot.lastScraperId, "http");
 });
 
-test("source health tracks scraper-specific success rates", () => {
+test("source health tracks scraper-specific success rates", async () => {
   const store = new InMemorySourceHealthStore();
 
   store.recordAccess({
@@ -73,7 +73,7 @@ test("source health tracks scraper-specific success rates", () => {
     occurredAt: "2026-09-07T10:02:00.000Z",
   });
 
-  const snapshot = store.getByDomain("WWW.EXAMPLE.COM");
+  const snapshot = await store.getByDomain("WWW.EXAMPLE.COM");
 
   assert.ok(snapshot);
   assert.equal(snapshot.scraperStats.length, 2);
@@ -99,7 +99,7 @@ test("source health tracks scraper-specific success rates", () => {
   assert.equal(browser.successRate, 1);
 });
 
-test("source health counts access failure categories", () => {
+test("source health counts access failure categories", async () => {
   const store = new InMemorySourceHealthStore();
 
   const statuses = [
@@ -126,7 +126,7 @@ test("source health counts access failure categories", () => {
     });
   });
 
-  const snapshot = store.get("source-1");
+  const snapshot = await store.get("source-1");
 
   assert.ok(snapshot);
   assert.equal(snapshot.loginRequiredCount, 1);
@@ -140,21 +140,21 @@ test("source health counts access failure categories", () => {
   assert.equal(snapshot.partialContentCount, 1);
 });
 
-test("unknown source returns null", () => {
+test("unknown source returns null", async () => {
   const store = new InMemorySourceHealthStore();
 
   assert.equal(
-    store.get("missing-source"),
+    await store.get("missing-source"),
     null
   );
 
   assert.equal(
-    store.getByDomain("missing.example.com"),
+    await store.getByDomain("missing.example.com"),
     null
   );
 });
 
-test("source health snapshots do not expose mutable internal state", () => {
+test("source health snapshots do not expose mutable internal state", async () => {
   const store = new InMemorySourceHealthStore();
 
   store.recordAccess({
@@ -167,11 +167,11 @@ test("source health snapshots do not expose mutable internal state", () => {
     occurredAt: "2026-09-07T10:00:00.000Z",
   });
 
-  const first = store.get("source-1");
+  const first = await store.get("source-1");
 
   assert.ok(first);
 
-  const second = store.get("source-1");
+  const second = await store.get("source-1");
 
   assert.ok(second);
   assert.notEqual(

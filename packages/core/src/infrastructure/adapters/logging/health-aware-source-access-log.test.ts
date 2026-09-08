@@ -77,7 +77,7 @@ test("health-aware source access log records successful access", async () => {
     })
   );
 
-  const health = healthStore.get("source-1");
+  const health = await healthStore.get("source-1");
 
   assert.ok(health);
   assert.equal(health.totalAttempts, 1);
@@ -105,7 +105,7 @@ test("health-aware source access log records inaccessible HTTP 200 content as fa
     })
   );
 
-  const health = healthStore.get("source-1");
+  const health = await healthStore.get("source-1");
 
   assert.ok(health);
   assert.equal(health.totalAttempts, 1);
@@ -134,7 +134,7 @@ test("health-aware source access log records bot blocking and scraper-specific f
     })
   );
 
-  const health = healthStore.get("source-1");
+  const health = await healthStore.get("source-1");
 
   assert.ok(health);
   assert.equal(health.botBlockedCount, 1);
@@ -170,7 +170,7 @@ test("health-aware source access log records network failure without HTTP status
     })
   );
 
-  const health = healthStore.get("source-1");
+  const health = await healthStore.get("source-1");
 
   assert.ok(health);
   assert.equal(health.networkUnavailableCount, 1);

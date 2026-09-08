@@ -52,7 +52,7 @@ function record(
   });
 }
 
-test("adaptive policy preserves baseline order without health history", () => {
+test("adaptive policy preserves baseline order without health history", async () => {
   const healthStore = new InMemorySourceHealthStore();
 
   const policy = new AdaptiveScraperSelectionPolicy(
@@ -65,7 +65,7 @@ test("adaptive policy preserves baseline order without health history", () => {
     scraper("proxy", ["http", "proxy"]),
   ];
 
-  const selected = policy.select(
+  const selected = await policy.select(
     {
       url: "https://example.com",
     },
@@ -79,7 +79,7 @@ test("adaptive policy preserves baseline order without health history", () => {
   );
 });
 
-test("adaptive policy does not trust insufficient health history", () => {
+test("adaptive policy does not trust insufficient health history", async () => {
   const healthStore = new InMemorySourceHealthStore();
 
   record(
@@ -99,7 +99,7 @@ test("adaptive policy does not trust insufficient health history", () => {
     scraper("browser", ["browser"]),
   ];
 
-  const selected = policy.select(
+  const selected = await policy.select(
     {
       url: "https://example.com",
     },
@@ -113,7 +113,7 @@ test("adaptive policy does not trust insufficient health history", () => {
   );
 });
 
-test("adaptive policy prioritizes scraper with stronger historical success rate", () => {
+test("adaptive policy prioritizes scraper with stronger historical success rate", async () => {
   const healthStore = new InMemorySourceHealthStore();
 
   record(
@@ -169,7 +169,7 @@ test("adaptive policy prioritizes scraper with stronger historical success rate"
     scraper("browser", ["browser"]),
   ];
 
-  const selected = policy.select(
+  const selected = await policy.select(
     {
       url: "https://example.com",
     },
@@ -183,7 +183,7 @@ test("adaptive policy prioritizes scraper with stronger historical success rate"
   );
 });
 
-test("adaptive policy keeps failed scrapers excluded by baseline policy", () => {
+test("adaptive policy keeps failed scrapers excluded by baseline policy", async () => {
   const healthStore = new InMemorySourceHealthStore();
 
   record(
@@ -232,7 +232,7 @@ test("adaptive policy keeps failed scrapers excluded by baseline policy", () => 
     scraper("browser", ["browser"]),
   ];
 
-  const selected = policy.select(
+  const selected = await policy.select(
     {
       url: "https://example.com",
     },
@@ -253,7 +253,7 @@ test("adaptive policy keeps failed scrapers excluded by baseline policy", () => 
   );
 });
 
-test("adaptive policy does not permanently blacklist historically weak scrapers", () => {
+test("adaptive policy does not permanently blacklist historically weak scrapers", async () => {
   const healthStore = new InMemorySourceHealthStore();
 
   record(
@@ -287,7 +287,7 @@ test("adaptive policy does not permanently blacklist historically weak scrapers"
     scraper("browser", ["browser"]),
   ];
 
-  const selected = policy.select(
+  const selected = await policy.select(
     {
       url: "https://example.com",
     },

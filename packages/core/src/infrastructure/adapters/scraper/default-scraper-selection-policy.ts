@@ -1,4 +1,4 @@
-﻿import type { ScraperSelectionPolicy } from "../../../application/ports/scraper-selection-policy.js";
+import type { ScraperSelectionPolicy } from "../../../application/ports/scraper-selection-policy.js";
 import type { ScraperFailure } from "../../../application/ports/scraper-orchestrator.js";
 import type {
   ScrapeRequest,
@@ -8,11 +8,11 @@ import type {
 export class DefaultScraperSelectionPolicy
   implements ScraperSelectionPolicy
 {
-  public select(
+  public async select(
     request: ScrapeRequest,
     candidates: readonly Scraper[],
     failures: readonly ScraperFailure[]
-  ): readonly Scraper[] {
+  ): Promise<readonly Scraper[]> {
     const failedIds = new Set(
       failures.map((failure) => failure.scraperId)
     );
