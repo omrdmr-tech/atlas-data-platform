@@ -439,12 +439,15 @@ function stringifyError(error: unknown): string {
   return String(error);
 }
 
+export type ScraperOrchestrationTerminationReason = "budget-exhausted" | "scrapers-exhausted";
+
 export class ScraperOrchestrationError extends Error {
   public readonly url: string;
   public readonly failures: readonly ScraperFailure[];
   public readonly attempts: number;
   public readonly maxAttempts: number;
   public readonly budgetExhausted: boolean;
+  public readonly terminationReason: ScraperOrchestrationTerminationReason;
 
   public constructor(
     url: string,
@@ -462,6 +465,7 @@ export class ScraperOrchestrationError extends Error {
     this.attempts = attempts;
     this.maxAttempts = maxAttempts;
     this.budgetExhausted = attempts >= maxAttempts;
+    this.terminationReason = this.budgetExhausted ? "budget-exhausted" : "scrapers-exhausted";
   }
 }
 
