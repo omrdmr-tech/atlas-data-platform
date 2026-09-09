@@ -64,6 +64,7 @@ export interface ScraperOrchestratorOptions {
   readonly accessDetector?: SourceAccessDetector;
   readonly requestIdGenerator?: RequestIdGenerator;
   readonly now?: () => Date;
+  readonly maxAttempts?: number;
 }
 
 export class ScraperOrchestrator
@@ -76,6 +77,7 @@ export class ScraperOrchestrator
   private readonly accessDetector: SourceAccessDetector;
   private readonly requestIdGenerator: RequestIdGenerator;
   private readonly now: () => Date;
+  private readonly maxAttempts: number;
 
   public constructor(
     scrapers: readonly Scraper[],
@@ -127,6 +129,11 @@ export class ScraperOrchestrator
       options.requestIdGenerator ??
       new SystemRequestIdGenerator();
     this.now = options.now ?? (() => new Date());
+    this.maxAttempts = options.maxAttempts ?? 3;
+
+    if (!Number.isInteger(this.maxAttempts) || this.maxAttempts <= 0) {
+      throw new Error('maxAttempts must be a positive integer.');
+    }
   }
 
   public async execute(
@@ -153,7 +160,10 @@ export class ScraperOrchestrator
 
     let attempt = 0;
 
-    while (remaining.length > 0) {
+    while (
+      remaining.length > 0 &&
+      attempt < this.maxAttempts
+    ) {
       const scraper = remaining[0];
       attempt++;
 
@@ -290,7 +300,9 @@ export class ScraperOrchestrator
 
     throw new ScraperOrchestrationError(
       request.url,
-      failures
+      failures,
+      attempt,
+      this.maxAttempts
     );
   }
 
@@ -430,10 +442,15 @@ function stringifyError(error: unknown): string {
 export class ScraperOrchestrationError extends Error {
   public readonly url: string;
   public readonly failures: readonly ScraperFailure[];
+  public readonly attempts: number;
+  public readonly maxAttempts: number;
+  public readonly budgetExhausted: boolean;
 
   public constructor(
     url: string,
-    failures: readonly ScraperFailure[]
+    failures: readonly ScraperFailure[],
+    attempts: number,
+    maxAttempts: number
   ) {
     super(
       `All configured scrapers failed for URL: ${url}`
@@ -442,6 +459,9 @@ export class ScraperOrchestrationError extends Error {
     this.name = "ScraperOrchestrationError";
     this.url = url;
     this.failures = [...failures];
+    this.attempts = attempts;
+    this.maxAttempts = maxAttempts;
+    this.budgetExhausted = attempts >= maxAttempts;
   }
 }
 

@@ -516,3 +516,100 @@ test(
     assert.equal(browserScraper.calls.length, 0);
   }
 );
+
+test("ScraperOrchestrator stops when maxAttempts is exhausted", async () => {
+  const first = new FakeScraper(
+    "first",
+    async () => {
+      throw new Error("first failed");
+    }
+  );
+
+  const second = new FakeScraper(
+    "second",
+    async () => {
+      throw new Error("second failed");
+    }
+  );
+
+  const third = new FakeScraper(
+    "third",
+    async () => {
+      throw new Error("third should not execute");
+    }
+  );
+
+  const orchestrator = new ScraperOrchestrator(
+    [first, second, third],
+    undefined,
+    { maxAttempts: 2 }
+  );
+
+  await assert.rejects(
+    orchestrator.execute({
+      url: "https://example.com",
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof ScraperOrchestrationError);
+      assert.equal(error.attempts, 2);
+      assert.equal(error.maxAttempts, 2);
+      assert.equal(error.budgetExhausted, true);
+      assert.equal(error.failures.length, 2);
+      return true;
+    }
+  );
+
+  assert.equal(first.calls.length, 1);
+  assert.equal(second.calls.length, 1);
+  assert.equal(third.calls.length, 0);
+});
+
+test("ScraperOrchestrator uses default maxAttempts of 3", async () => {
+  const scrapers = [1, 2, 3, 4].map(
+    (number) =>
+      new FakeScraper(
+        `scraper-${number}`,
+        async () => {
+          throw new Error(`failure-${number}`);
+        }
+      )
+  );
+
+  const orchestrator = new ScraperOrchestrator(scrapers);
+
+  await assert.rejects(
+    orchestrator.execute({
+      url: "https://example.com",
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof ScraperOrchestrationError);
+      assert.equal(error.attempts, 3);
+      assert.equal(error.maxAttempts, 3);
+      assert.equal(error.budgetExhausted, true);
+      assert.equal(error.failures.length, 3);
+      return true;
+    }
+  );
+
+  assert.equal(scrapers[0]?.calls.length, 1);
+  assert.equal(scrapers[1]?.calls.length, 1);
+  assert.equal(scrapers[2]?.calls.length, 1);
+  assert.equal(scrapers[3]?.calls.length, 0);
+});
+
+test("ScraperOrchestrator rejects invalid maxAttempts", () => {
+  const scraper = new FakeScraper(
+    "scraper",
+    async (request) => successResult(request.url, "ok")
+  );
+
+  assert.throws(
+    () => new ScraperOrchestrator([scraper], undefined, { maxAttempts: 0 }),
+    { message: "maxAttempts must be a positive integer." }
+  );
+
+  assert.throws(
+    () => new ScraperOrchestrator([scraper], undefined, { maxAttempts: 1.5 }),
+    { message: "maxAttempts must be a positive integer." }
+  );
+});
