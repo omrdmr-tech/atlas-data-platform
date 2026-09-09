@@ -1,4 +1,4 @@
-﻿export * from "./use-cases/use-case.js";
+export * from "./use-cases/use-case.js";
 export * from "./commands/command.js";
 export * from "./commands/command-handler.js";
 export * from "./queries/query.js";
@@ -11,3 +11,6 @@ export * from "./ports/scraper-capabilities.js";
 
 export * from "./ports/proxy-provider.js";
 export * from "./ports/proxy-transport.js";
+
+export * from './ports/source-reliability-scorer.js';
+export * from './ports/clock.js';

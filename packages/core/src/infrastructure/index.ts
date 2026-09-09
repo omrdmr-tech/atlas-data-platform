@@ -4,7 +4,6 @@ export interface InfrastructureModule {
   shutdown(): Promise<void>;
 }
 
-export * from "./ports/clock.js";
 export * from "./ports/database.js";
 export * from "./ports/transaction.js";
 export * from "./ports/cache.js";

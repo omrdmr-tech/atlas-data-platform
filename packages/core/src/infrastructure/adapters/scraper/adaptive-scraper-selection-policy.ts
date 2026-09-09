@@ -13,11 +13,20 @@ import type {
 
 import type {
   SourceHealthSnapshot,
+  SourceHealthStore,
 } from "../../../application/ports/source-health.js";
 
 import type {
-  SourceHealthStore,
-} from "../../../application/ports/source-health.js";
+  SourceReliabilityScorer,
+} from "../../../application/ports/source-reliability-scorer.js";
+
+import {
+  SystemClock,
+} from "../system-clock.js";
+
+import {
+  DefaultSourceReliabilityScorer,
+} from "../../../application/services/source-reliability-scorer.js";
 
 import {
   DefaultScraperSelectionPolicy,
@@ -27,6 +36,7 @@ export interface AdaptiveScraperSelectionPolicyOptions {
   readonly minimumAttempts?: number;
   readonly successWeight?: number;
   readonly failureWeight?: number;
+  readonly reliabilityScorer?: SourceReliabilityScorer;
 }
 
 export class AdaptiveScraperSelectionPolicy
@@ -36,36 +46,50 @@ export class AdaptiveScraperSelectionPolicy
   private readonly minimumAttempts: number;
   private readonly successWeight: number;
   private readonly failureWeight: number;
+  private readonly reliabilityScorer: SourceReliabilityScorer;
 
   public constructor(
     private readonly healthStore: SourceHealthStore,
     basePolicy: ScraperSelectionPolicy =
       new DefaultScraperSelectionPolicy(),
-    options: AdaptiveScraperSelectionPolicyOptions = {}
+    options: AdaptiveScraperSelectionPolicyOptions = {},
   ) {
     this.basePolicy = basePolicy;
-    this.minimumAttempts = options.minimumAttempts ?? 2;
-    this.successWeight = options.successWeight ?? 100;
-    this.failureWeight = options.failureWeight ?? 100;
+    this.minimumAttempts =
+      options.minimumAttempts ?? 2;
+    this.successWeight =
+      options.successWeight ?? 100;
+    this.failureWeight =
+      options.failureWeight ?? 100;
+
+    this.reliabilityScorer =
+      options.reliabilityScorer ??
+      new DefaultSourceReliabilityScorer(
+        new SystemClock(),
+      );
   }
 
   public async select(
     request: ScrapeRequest,
     candidates: readonly Scraper[],
-    failures: readonly ScraperFailure[]
+    failures: readonly ScraperFailure[],
   ): Promise<readonly Scraper[]> {
-    const baseline = await this.basePolicy.select(
-      request,
-      candidates,
-      failures
-    );
+    const baseline =
+      await this.basePolicy.select(
+        request,
+        candidates,
+        failures,
+      );
 
     if (baseline.length <= 1) {
       return baseline;
     }
 
-    const sourceId = resolveSourceId(request);
-    const health = await this.healthStore.get(sourceId);
+    const sourceId =
+      resolveSourceId(request);
+
+    const health =
+      await this.healthStore.get(sourceId);
 
     if (!health) {
       return baseline;
@@ -75,56 +99,70 @@ export class AdaptiveScraperSelectionPolicy
       baseline.map((scraper, index) => [
         scraper.id,
         index,
-      ])
+      ]),
     );
 
-    return [...baseline].sort((left, right) => {
-      const leftScore = this.healthScore(
-        left,
-        health
-      );
+    return [...baseline].sort(
+      (left, right) => {
+        const leftScore =
+          this.healthScore(left, health);
 
-      const rightScore = this.healthScore(
-        right,
-        health
-      );
+        const rightScore =
+          this.healthScore(right, health);
 
-      if (rightScore !== leftScore) {
-        return rightScore - leftScore;
-      }
+        if (rightScore !== leftScore) {
+          return rightScore - leftScore;
+        }
 
-      return (
-        (baselineIndexes.get(left.id) ?? 0) -
-        (baselineIndexes.get(right.id) ?? 0)
-      );
-    });
+        return (
+          (baselineIndexes.get(left.id) ?? 0) -
+          (baselineIndexes.get(right.id) ?? 0)
+        );
+      },
+    );
   }
 
   private healthScore(
     scraper: Scraper,
-    health: SourceHealthSnapshot
+    health: SourceHealthSnapshot,
   ): number {
-    const stats = health.scraperStats.find(
-      (item) => item.scraperId === scraper.id
-    );
+    const stats =
+      health.scraperStats.find(
+        (item) =>
+          item.scraperId === scraper.id,
+      );
 
-    if (!stats || stats.totalAttempts < this.minimumAttempts) {
+    if (
+      !stats ||
+      stats.totalAttempts <
+        this.minimumAttempts
+    ) {
       return 0;
     }
 
+    const reliability =
+      this.reliabilityScorer.score(
+        health,
+        stats,
+      );
+
     return (
-      stats.successRate * this.successWeight -
-      (1 - stats.successRate) * this.failureWeight
+      reliability.score *
+        this.successWeight -
+      (1 - reliability.score) *
+        this.failureWeight
     );
   }
 }
 
 function resolveSourceId(
-  request: ScrapeRequest
+  request: ScrapeRequest,
 ): string {
   if (request.sourceId) {
     return request.sourceId;
   }
 
-  return new URL(request.url).hostname.toLowerCase();
+  return new URL(
+    request.url,
+  ).hostname.toLowerCase();
 }
