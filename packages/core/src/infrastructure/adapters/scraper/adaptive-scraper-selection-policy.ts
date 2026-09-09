@@ -21,6 +21,10 @@ import type {
 } from "../../../application/ports/source-reliability-scorer.js";
 
 import {
+  capabilitiesForAccessStatus,
+} from "../../../application/services/scraper-capability-strategy.js";
+
+import {
   SystemClock,
 } from "../system-clock.js";
 
@@ -36,6 +40,7 @@ export interface AdaptiveScraperSelectionPolicyOptions {
   readonly minimumAttempts?: number;
   readonly successWeight?: number;
   readonly failureWeight?: number;
+  readonly accessStrategyWeight?: number;
   readonly reliabilityScorer?: SourceReliabilityScorer;
 }
 
@@ -46,6 +51,7 @@ export class AdaptiveScraperSelectionPolicy
   private readonly minimumAttempts: number;
   private readonly successWeight: number;
   private readonly failureWeight: number;
+  private readonly accessStrategyWeight: number;
   private readonly reliabilityScorer: SourceReliabilityScorer;
 
   public constructor(
@@ -61,6 +67,8 @@ export class AdaptiveScraperSelectionPolicy
       options.successWeight ?? 100;
     this.failureWeight =
       options.failureWeight ?? 100;
+    this.accessStrategyWeight =
+      options.accessStrategyWeight ?? 50;
 
     this.reliabilityScorer =
       options.reliabilityScorer ??
@@ -132,27 +140,71 @@ export class AdaptiveScraperSelectionPolicy
           item.scraperId === scraper.id,
       );
 
-    if (
-      !stats ||
-      stats.totalAttempts <
+    const reliabilityScore =
+      stats &&
+      stats.totalAttempts >=
         this.minimumAttempts
-    ) {
-      return 0;
-    }
+        ? this.reliabilityScorer.score(
+            health,
+            stats,
+          ).score
+        : 0;
 
-    const reliability =
-      this.reliabilityScorer.score(
-        health,
-        stats,
+    const reliabilityContribution =
+      reliabilityScore *
+        this.successWeight -
+      (1 - reliabilityScore) *
+        this.failureWeight;
+
+    const accessStrategyContribution =
+      scoreAccessStrategy(
+        scraper,
+        health.lastAccessStatus,
+        this.accessStrategyWeight,
       );
 
     return (
-      reliability.score *
-        this.successWeight -
-      (1 - reliability.score) *
-        this.failureWeight
+      reliabilityContribution +
+      accessStrategyContribution
     );
   }
+}
+
+function scoreAccessStrategy(
+  scraper: Scraper,
+  status: SourceHealthSnapshot["lastAccessStatus"],
+  weight: number,
+): number {
+  if (!status || status === "accessible") {
+    return 0;
+  }
+
+  const preferred =
+    capabilitiesForAccessStatus(status);
+
+  if (preferred.length === 0) {
+    return 0;
+  }
+
+  const matches = scraper.descriptor.capabilities.filter(
+    (capability) => preferred.includes(capability),
+  );
+
+  if (matches.length === 0) {
+    return 0;
+  }
+
+  const bestIndex = Math.min(
+    ...matches.map((capability) =>
+      preferred.indexOf(capability),
+    ),
+  );
+
+  const rank =
+    Math.max(0, preferred.length - bestIndex) /
+    preferred.length;
+
+  return rank * weight;
 }
 
 function resolveSourceId(

@@ -306,3 +306,121 @@ test("adaptive policy does not permanently blacklist historically weak scrapers"
     )
   );
 });
+
+function recordStatus(
+  store: InMemorySourceHealthStore,
+  scraperId: string,
+  accessType: "http" | "browser" | "proxy",
+  status: "accessible" | "login-required" | "subscription-required" | "paywall" | "captcha" | "bot-blocked" | "rate-limited" | "network-unavailable" | "server-error" | "partial-content" | "unknown",
+  occurredAt: string,
+): void {
+  store.recordAccess({
+    sourceId: "example.com",
+    domain: "example.com",
+    scraperId,
+    accessType,
+    status,
+    success: status === "accessible",
+    occurredAt,
+  });
+}
+
+test("adaptive policy prefers proxy after rate limiting", async () => {
+  const healthStore = new InMemorySourceHealthStore();
+
+  recordStatus(
+    healthStore,
+    "http",
+    "http",
+    "rate-limited",
+    "2026-09-09T10:00:00.000Z",
+  );
+
+  const policy = new AdaptiveScraperSelectionPolicy(
+    healthStore,
+  );
+
+  const candidates = [
+    scraper("http", ["http"]),
+    scraper("browser", ["browser"]),
+    scraper("proxy", ["http", "proxy"]),
+  ];
+
+  const selected = await policy.select(
+    { url: "https://example.com" },
+    candidates,
+    [],
+  );
+
+  assert.deepEqual(
+    selected.map((item) => item.id),
+    ["proxy", "browser", "http"],
+  );
+});
+
+test("adaptive policy prefers anti-bot strategy after bot blocking", async () => {
+  const healthStore = new InMemorySourceHealthStore();
+  recordStatus(healthStore, "http", "http", "bot-blocked", "2026-09-09T10:00:00.000Z");
+  const policy = new AdaptiveScraperSelectionPolicy(healthStore);
+  const candidates = [
+    scraper("http", ["http"]),
+    scraper("browser", ["browser"]),
+    scraper("proxy", ["http", "proxy"]),
+    scraper("anti-bot", ["anti-bot"]),
+  ];
+  const selected = await policy.select({ url: "https://example.com" }, candidates, []);
+  assert.deepEqual(selected.map((item) => item.id), ["anti-bot", "browser", "proxy", "http"]);
+});
+
+test("adaptive policy prefers anti-bot strategy after captcha", async () => {
+  const healthStore = new InMemorySourceHealthStore();
+  recordStatus(healthStore, "browser", "browser", "captcha", "2026-09-09T10:00:00.000Z");
+  const policy = new AdaptiveScraperSelectionPolicy(healthStore);
+  const candidates = [
+    scraper("http", ["http"]),
+    scraper("browser", ["browser"]),
+    scraper("proxy", ["http", "proxy"]),
+    scraper("anti-bot", ["anti-bot"]),
+  ];
+  const selected = await policy.select({ url: "https://example.com" }, candidates, []);
+  assert.deepEqual(selected.map((item) => item.id), ["anti-bot", "browser", "proxy", "http"]);
+});
+
+test("adaptive policy prefers proxy after network unavailability", async () => {
+  const healthStore = new InMemorySourceHealthStore();
+  recordStatus(healthStore, "http", "http", "network-unavailable", "2026-09-09T10:00:00.000Z");
+  const policy = new AdaptiveScraperSelectionPolicy(healthStore);
+  const candidates = [
+    scraper("http", ["http"]),
+    scraper("browser", ["browser"]),
+    scraper("proxy", ["http", "proxy"]),
+  ];
+  const selected = await policy.select({ url: "https://example.com" }, candidates, []);
+  assert.equal(selected[0]?.id, "proxy");
+});
+
+test("adaptive policy prefers browser for paywall access", async () => {
+  const healthStore = new InMemorySourceHealthStore();
+  recordStatus(healthStore, "http", "http", "paywall", "2026-09-09T10:00:00.000Z");
+  const policy = new AdaptiveScraperSelectionPolicy(healthStore);
+  const candidates = [
+    scraper("http", ["http"]),
+    scraper("javascript", ["javascript"]),
+    scraper("browser", ["browser"]),
+  ];
+  const selected = await policy.select({ url: "https://example.com" }, candidates, []);
+  assert.equal(selected[0]?.id, "browser");
+});
+
+test("adaptive policy prefers browser for server errors", async () => {
+  const healthStore = new InMemorySourceHealthStore();
+  recordStatus(healthStore, "http", "http", "server-error", "2026-09-09T10:00:00.000Z");
+  const policy = new AdaptiveScraperSelectionPolicy(healthStore);
+  const candidates = [
+    scraper("http", ["http"]),
+    scraper("browser", ["browser"]),
+    scraper("proxy", ["http", "proxy"]),
+  ];
+  const selected = await policy.select({ url: "https://example.com" }, candidates, []);
+  assert.deepEqual(selected.map((item) => item.id), ["browser", "proxy", "http"]);
+});
