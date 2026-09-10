@@ -1,4 +1,5 @@
 import type {
+  ScraperAttemptTrace,
   ScraperFailure,
   ScraperFailureReason,
   ScraperOrchestrationResult,
@@ -132,7 +133,7 @@ export class ScraperOrchestrator
     this.maxAttempts = options.maxAttempts ?? 3;
 
     if (!Number.isInteger(this.maxAttempts) || this.maxAttempts <= 0) {
-      throw new Error('maxAttempts must be a positive integer.');
+      throw new Error("maxAttempts must be a positive integer.");
     }
   }
 
@@ -140,6 +141,7 @@ export class ScraperOrchestrator
     request: ScrapeRequest
   ): Promise<ScraperOrchestrationResult> {
     const failures: ScraperFailure[] = [];
+    const attemptHistory: ScraperAttemptTrace[] = [];
 
     const requestId = resolveRequestId(
       request,
@@ -202,6 +204,20 @@ export class ScraperOrchestrator
           isSuccessfulHttpResponse(result) &&
           access.contentAvailable
         ) {
+          const completedAt = this.now();
+
+          attemptHistory.push({
+            attempt,
+            scraperId: scraper.id,
+            startedAt: startedAt.toISOString(),
+            completedAt: completedAt.toISOString(),
+            durationMs:
+              completedAt.getTime() -
+              startedAt.getTime(),
+            status: "success",
+            statusCode: result.statusCode,
+          });
+
           await this.writeProcessLog({
             requestId,
             sourceId,
@@ -217,6 +233,7 @@ export class ScraperOrchestrator
             result,
             scraperId: scraper.id,
             failures: [...failures],
+            attemptHistory: [...attemptHistory],
           };
         }
 
@@ -236,6 +253,22 @@ export class ScraperOrchestrator
           reason,
           statusCode: result.statusCode,
           error,
+        });
+
+        const completedAt = this.now();
+
+        attemptHistory.push({
+          attempt,
+          scraperId: scraper.id,
+          startedAt: startedAt.toISOString(),
+          completedAt: completedAt.toISOString(),
+          durationMs:
+            completedAt.getTime() -
+            startedAt.getTime(),
+          status: "failed",
+          failureReason: reason,
+          statusCode: result.statusCode,
+          error: error.message,
         });
 
         await this.writeProcessLog({
@@ -277,6 +310,22 @@ export class ScraperOrchestrator
           error,
         });
 
+        const completedAt = this.now();
+
+        attemptHistory.push({
+          attempt,
+          scraperId: scraper.id,
+          startedAt: startedAt.toISOString(),
+          completedAt: completedAt.toISOString(),
+          durationMs:
+            completedAt.getTime() -
+            startedAt.getTime(),
+          status: "failed",
+          failureReason: reason,
+          statusCode: null,
+          error: stringifyError(error),
+        });
+
         await this.writeProcessLog({
           requestId,
           sourceId,
@@ -302,7 +351,8 @@ export class ScraperOrchestrator
       request.url,
       failures,
       attempt,
-      this.maxAttempts
+      this.maxAttempts,
+      attemptHistory
     );
   }
 
@@ -439,7 +489,9 @@ function stringifyError(error: unknown): string {
   return String(error);
 }
 
-export type ScraperOrchestrationTerminationReason = "budget-exhausted" | "scrapers-exhausted";
+export type ScraperOrchestrationTerminationReason =
+  | "budget-exhausted"
+  | "scrapers-exhausted";
 
 export class ScraperOrchestrationError extends Error {
   public readonly url: string;
@@ -448,12 +500,14 @@ export class ScraperOrchestrationError extends Error {
   public readonly maxAttempts: number;
   public readonly budgetExhausted: boolean;
   public readonly terminationReason: ScraperOrchestrationTerminationReason;
+  public readonly attemptHistory: readonly ScraperAttemptTrace[];
 
   public constructor(
     url: string,
     failures: readonly ScraperFailure[],
     attempts: number,
-    maxAttempts: number
+    maxAttempts: number,
+    attemptHistory: readonly ScraperAttemptTrace[]
   ) {
     super(
       `All configured scrapers failed for URL: ${url}`
@@ -462,10 +516,14 @@ export class ScraperOrchestrationError extends Error {
     this.name = "ScraperOrchestrationError";
     this.url = url;
     this.failures = [...failures];
+    this.attemptHistory = [...attemptHistory];
     this.attempts = attempts;
     this.maxAttempts = maxAttempts;
     this.budgetExhausted = attempts >= maxAttempts;
-    this.terminationReason = this.budgetExhausted ? "budget-exhausted" : "scrapers-exhausted";
+    this.terminationReason =
+      this.budgetExhausted
+        ? "budget-exhausted"
+        : "scrapers-exhausted";
   }
 }
 

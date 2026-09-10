@@ -5,55 +5,99 @@ import type {
   ScrapeResult,
   Scraper,
 } from "./scraper.js";
-import type { ScraperOrchestrator } from "./scraper-orchestrator.js";
+import type { ScraperCapability } from "./scraper-capabilities.js";
+import type {
+  ScraperOrchestrationResult,
+  ScraperOrchestrator,
+} from "./scraper-orchestrator.js";
 
-class TestScraper implements Scraper {
-  public readonly descriptor = {
-    scraperId: "test",
-    capabilities: ["http"] as const,
+class FakeScraper implements Scraper {
+  public readonly descriptor: {
+    readonly scraperId: string;
+    readonly capabilities: readonly ScraperCapability[];
   };
 
   public constructor(
     public readonly id: string,
-    private readonly response: ScrapeResult
-  ) {}
+    private readonly handler: (
+      request: ScrapeRequest
+    ) => Promise<ScrapeResult>,
+    capabilities: readonly ScraperCapability[] = ["http"]
+  ) {
+    this.descriptor = {
+      scraperId: id,
+      capabilities,
+    };
+  }
 
   public async execute(
-    _request: ScrapeRequest
+    request: ScrapeRequest
   ): Promise<ScrapeResult> {
-    return this.response;
+    return this.handler(request);
   }
 }
 
-test(
-  "ScraperOrchestrator contract exposes an execute operation",
-  async () => {
-    const scraper = new TestScraper("test", {
-      url: "https://example.com",
-      statusCode: 200,
-      content: "<html></html>",
-      contentType: "text/html",
-    });
+function successResult(
+  url: string,
+  content: string
+): ScrapeResult {
+  return {
+    url,
+    statusCode: 200,
+    content,
+    contentType: "text/html",
+  };
+}
 
-    const orchestrator: ScraperOrchestrator = {
-      async execute(request) {
-        const result = await scraper.execute(request);
-
-        return {
-          result,
-          scraperId: scraper.id,
-          failures: [],
-        };
+test("ScraperOrchestrationResult includes attempt history", async () => {
+  const result: ScraperOrchestrationResult = {
+    result: successResult(
+      "https://example.com",
+      "content"
+    ),
+    scraperId: "scraper",
+    failures: [],
+    attemptHistory: [
+      {
+        attempt: 1,
+        scraperId: "scraper",
+        startedAt: "2026-01-01T00:00:00.000Z",
+        completedAt: "2026-01-01T00:00:01.000Z",
+        durationMs: 1000,
+        status: "success",
+        statusCode: 200,
       },
-    };
+    ],
+  };
 
-    const response = await orchestrator.execute({
-      url: "https://example.com",
-    });
+  assert.equal(result.attemptHistory.length, 1);
+  assert.equal(
+    result.attemptHistory[0]?.scraperId,
+    "scraper"
+  );
+  assert.equal(
+    result.attemptHistory[0]?.status,
+    "success"
+  );
+});
 
-    assert.equal(response.scraperId, "test");
-    assert.equal(response.result.statusCode, 200);
-    assert.equal(response.result.content, "<html></html>");
-    assert.deepEqual(response.failures, []);
-  }
-);
+test("ScraperOrchestrator port remains implementable", async () => {
+  const orchestrator: ScraperOrchestrator = {
+    execute: async (
+      request: ScrapeRequest
+    ): Promise<ScraperOrchestrationResult> => ({
+      result: successResult(request.url, "content"),
+      scraperId: "scraper",
+      failures: [],
+      attemptHistory: [],
+    }),
+  };
+
+  const result = await orchestrator.execute({
+    url: "https://example.com",
+  });
+
+  assert.equal(result.scraperId, "scraper");
+  assert.deepEqual(result.failures, []);
+  assert.deepEqual(result.attemptHistory, []);
+});

@@ -15,22 +15,22 @@ class FakeScraper implements Scraper {
   public readonly calls: ScrapeRequest[] = [];
 
   public readonly descriptor: {
-  readonly scraperId: string;
-  readonly capabilities: readonly ScraperCapability[];
-};
+    readonly scraperId: string;
+    readonly capabilities: readonly ScraperCapability[];
+  };
 
   public constructor(
-  public readonly id: string,
-  private readonly handler: (
-    request: ScrapeRequest
-  ) => Promise<ScrapeResult>,
-  capabilities: readonly ScraperCapability[] = ["http"]
-) {
-  this.descriptor = {
-    scraperId: id,
-    capabilities,
-  };
-}
+    public readonly id: string,
+    private readonly handler: (
+      request: ScrapeRequest
+    ) => Promise<ScrapeResult>,
+    capabilities: readonly ScraperCapability[] = ["http"]
+  ) {
+    this.descriptor = {
+      scraperId: id,
+      capabilities,
+    };
+  }
 
   public async execute(
     request: ScrapeRequest
@@ -77,6 +77,12 @@ test("ScraperOrchestrator uses the first successful scraper", async () => {
   assert.equal(result.scraperId, "first");
   assert.equal(result.result.content, "first");
   assert.deepEqual(result.failures, []);
+  assert.equal(result.attemptHistory.length, 1);
+  assert.equal(result.attemptHistory[0]?.attempt, 1);
+  assert.equal(result.attemptHistory[0]?.scraperId, "first");
+  assert.equal(result.attemptHistory[0]?.status, "success");
+  assert.equal(result.attemptHistory[0]?.failureReason, undefined);
+  assert.equal(result.attemptHistory[0]?.statusCode, 200);
   assert.equal(first.calls.length, 1);
   assert.equal(second.calls.length, 0);
 });
@@ -113,6 +119,54 @@ test("ScraperOrchestrator falls back after a scraper failure", async () => {
   assert.equal(result.failures[0]?.scraperId, "first");
   assert.equal(result.failures[0]?.error, firstError);
 
+  assert.equal(result.attemptHistory.length, 2);
+
+  assert.equal(
+    result.attemptHistory[0]?.attempt,
+    1
+  );
+  assert.equal(
+    result.attemptHistory[0]?.scraperId,
+    "first"
+  );
+  assert.equal(
+    result.attemptHistory[0]?.status,
+    "failed"
+  );
+  assert.equal(
+    result.attemptHistory[0]?.failureReason,
+    "unknown"
+  );
+  assert.equal(
+    result.attemptHistory[0]?.statusCode,
+    null
+  );
+  assert.equal(
+    result.attemptHistory[0]?.error,
+    "first scraper failed"
+  );
+
+  assert.equal(
+    result.attemptHistory[1]?.attempt,
+    2
+  );
+  assert.equal(
+    result.attemptHistory[1]?.scraperId,
+    "second"
+  );
+  assert.equal(
+    result.attemptHistory[1]?.status,
+    "success"
+  );
+  assert.equal(
+    result.attemptHistory[1]?.failureReason,
+    undefined
+  );
+  assert.equal(
+    result.attemptHistory[1]?.statusCode,
+    200
+  );
+
   assert.equal(first.calls.length, 1);
   assert.equal(second.calls.length, 1);
 });
@@ -146,26 +200,87 @@ test("ScraperOrchestrator records all failures", async () => {
     }),
     (error: unknown) => {
       assert.ok(error instanceof ScraperOrchestrationError);
+
       assert.equal(
         error.url,
         "https://example.com"
       );
+
       assert.equal(error.failures.length, 2);
+
       assert.equal(
         error.failures[0]?.scraperId,
         "first"
       );
+
       assert.equal(
         error.failures[0]?.error,
         firstError
       );
+
       assert.equal(
         error.failures[1]?.scraperId,
         "second"
       );
+
       assert.equal(
         error.failures[1]?.error,
         secondError
+      );
+
+      assert.equal(
+        error.attemptHistory.length,
+        2
+      );
+
+      assert.equal(
+        error.attemptHistory[0]?.attempt,
+        1
+      );
+      assert.equal(
+        error.attemptHistory[0]?.scraperId,
+        "first"
+      );
+      assert.equal(
+        error.attemptHistory[0]?.status,
+        "failed"
+      );
+      assert.equal(
+        error.attemptHistory[0]?.failureReason,
+        "unknown"
+      );
+      assert.equal(
+        error.attemptHistory[0]?.statusCode,
+        null
+      );
+      assert.equal(
+        error.attemptHistory[0]?.error,
+        "first failed"
+      );
+
+      assert.equal(
+        error.attemptHistory[1]?.attempt,
+        2
+      );
+      assert.equal(
+        error.attemptHistory[1]?.scraperId,
+        "second"
+      );
+      assert.equal(
+        error.attemptHistory[1]?.status,
+        "failed"
+      );
+      assert.equal(
+        error.attemptHistory[1]?.failureReason,
+        "unknown"
+      );
+      assert.equal(
+        error.attemptHistory[1]?.statusCode,
+        null
+      );
+      assert.equal(
+        error.attemptHistory[1]?.error,
+        "second failed"
       );
 
       return true;
@@ -225,7 +340,22 @@ test("ScraperOrchestrator preserves scraper order", async () => {
     "second",
     "third",
   ]);
+
+  assert.equal(result.attemptHistory.length, 3);
+  assert.deepEqual(
+    result.attemptHistory.map(
+      (entry) => entry.scraperId
+    ),
+    ["first", "second", "third"]
+  );
+  assert.deepEqual(
+    result.attemptHistory.map(
+      (entry) => entry.status
+    ),
+    ["failed", "failed", "success"]
+  );
 });
+
 test("ScraperOrchestrator classifies HTTP 403 as blocked", async () => {
   const scraper = new FakeScraper(
     "blocked-scraper",
@@ -246,8 +376,35 @@ test("ScraperOrchestrator classifies HTTP 403 as blocked", async () => {
     (error: unknown) => {
       assert.ok(error instanceof ScraperOrchestrationError);
       assert.equal(error.failures.length, 1);
-      assert.equal(error.failures[0]?.reason, "blocked");
-      assert.equal(error.failures[0]?.statusCode, 403);
+      assert.equal(
+        error.failures[0]?.reason,
+        "blocked"
+      );
+      assert.equal(
+        error.failures[0]?.statusCode,
+        403
+      );
+
+      assert.equal(
+        error.attemptHistory.length,
+        1
+      );
+      assert.equal(
+        error.attemptHistory[0]?.scraperId,
+        "blocked-scraper"
+      );
+      assert.equal(
+        error.attemptHistory[0]?.status,
+        "failed"
+      );
+      assert.equal(
+        error.attemptHistory[0]?.failureReason,
+        "blocked"
+      );
+      assert.equal(
+        error.attemptHistory[0]?.statusCode,
+        403
+      );
 
       return true;
     }
@@ -273,8 +430,23 @@ test("ScraperOrchestrator classifies HTTP 429 as rate-limited", async () => {
     }),
     (error: unknown) => {
       assert.ok(error instanceof ScraperOrchestrationError);
-      assert.equal(error.failures[0]?.reason, "rate-limited");
-      assert.equal(error.failures[0]?.statusCode, 429);
+      assert.equal(
+        error.failures[0]?.reason,
+        "rate-limited"
+      );
+      assert.equal(
+        error.failures[0]?.statusCode,
+        429
+      );
+
+      assert.equal(
+        error.attemptHistory[0]?.failureReason,
+        "rate-limited"
+      );
+      assert.equal(
+        error.attemptHistory[0]?.statusCode,
+        429
+      );
 
       return true;
     }
@@ -300,8 +472,23 @@ test("ScraperOrchestrator classifies HTTP 500 as server-error", async () => {
     }),
     (error: unknown) => {
       assert.ok(error instanceof ScraperOrchestrationError);
-      assert.equal(error.failures[0]?.reason, "server-error");
-      assert.equal(error.failures[0]?.statusCode, 500);
+      assert.equal(
+        error.failures[0]?.reason,
+        "server-error"
+      );
+      assert.equal(
+        error.failures[0]?.statusCode,
+        500
+      );
+
+      assert.equal(
+        error.attemptHistory[0]?.failureReason,
+        "server-error"
+      );
+      assert.equal(
+        error.attemptHistory[0]?.statusCode,
+        500
+      );
 
       return true;
     }
@@ -327,8 +514,23 @@ test("ScraperOrchestrator classifies HTTP 404 as http-error", async () => {
     }),
     (error: unknown) => {
       assert.ok(error instanceof ScraperOrchestrationError);
-      assert.equal(error.failures[0]?.reason, "http-error");
-      assert.equal(error.failures[0]?.statusCode, 404);
+      assert.equal(
+        error.failures[0]?.reason,
+        "http-error"
+      );
+      assert.equal(
+        error.failures[0]?.statusCode,
+        404
+      );
+
+      assert.equal(
+        error.attemptHistory[0]?.failureReason,
+        "http-error"
+      );
+      assert.equal(
+        error.attemptHistory[0]?.statusCode,
+        404
+      );
 
       return true;
     }
@@ -354,8 +556,23 @@ test("ScraperOrchestrator classifies AbortError as timeout", async () => {
     }),
     (error: unknown) => {
       assert.ok(error instanceof ScraperOrchestrationError);
-      assert.equal(error.failures[0]?.reason, "timeout");
-      assert.equal(error.failures[0]?.statusCode, null);
+      assert.equal(
+        error.failures[0]?.reason,
+        "timeout"
+      );
+      assert.equal(
+        error.failures[0]?.statusCode,
+        null
+      );
+
+      assert.equal(
+        error.attemptHistory[0]?.failureReason,
+        "timeout"
+      );
+      assert.equal(
+        error.attemptHistory[0]?.statusCode,
+        null
+      );
 
       return true;
     }
@@ -378,13 +595,29 @@ test("ScraperOrchestrator classifies TypeError as network-error", async () => {
     }),
     (error: unknown) => {
       assert.ok(error instanceof ScraperOrchestrationError);
-      assert.equal(error.failures[0]?.reason, "network-error");
-      assert.equal(error.failures[0]?.statusCode, null);
+      assert.equal(
+        error.failures[0]?.reason,
+        "network-error"
+      );
+      assert.equal(
+        error.failures[0]?.statusCode,
+        null
+      );
+
+      assert.equal(
+        error.attemptHistory[0]?.failureReason,
+        "network-error"
+      );
+      assert.equal(
+        error.attemptHistory[0]?.statusCode,
+        null
+      );
 
       return true;
     }
   );
 });
+
 test(
   "ScraperOrchestrator skips scrapers that do not satisfy required capabilities",
   async () => {
@@ -419,22 +652,45 @@ test(
       result.scraperId,
       "browser-scraper"
     );
+
     assert.equal(
       result.result.content,
       "browser"
     );
 
-    assert.equal(httpScraper.calls.length, 0);
-    assert.equal(browserScraper.calls.length, 1);
+    assert.equal(
+      httpScraper.calls.length,
+      0
+    );
+    assert.equal(
+      browserScraper.calls.length,
+      1
+    );
+
+    assert.equal(
+      result.attemptHistory.length,
+      1
+    );
+    assert.equal(
+      result.attemptHistory[0]?.scraperId,
+      "browser-scraper"
+    );
+    assert.equal(
+      result.attemptHistory[0]?.status,
+      "success"
+    );
   }
 );
+
 test(
   "ScraperOrchestrator does not record capability-mismatched scrapers as failures",
   async () => {
     const httpScraper = new FakeScraper(
       "http-scraper",
       async () => {
-        throw new Error("HTTP scraper should not execute");
+        throw new Error(
+          "HTTP scraper should not execute"
+        );
       },
       ["http"]
     );
@@ -456,12 +712,37 @@ test(
       requiredCapabilities: ["browser"],
     });
 
-    assert.equal(result.scraperId, "browser-scraper");
-    assert.equal(result.result.content, "browser");
+    assert.equal(
+      result.scraperId,
+      "browser-scraper"
+    );
+    assert.equal(
+      result.result.content,
+      "browser"
+    );
     assert.deepEqual(result.failures, []);
 
-    assert.equal(httpScraper.calls.length, 0);
-    assert.equal(browserScraper.calls.length, 1);
+    assert.equal(
+      httpScraper.calls.length,
+      0
+    );
+    assert.equal(
+      browserScraper.calls.length,
+      1
+    );
+
+    assert.equal(
+      result.attemptHistory.length,
+      1
+    );
+    assert.equal(
+      result.attemptHistory[0]?.scraperId,
+      "browser-scraper"
+    );
+    assert.equal(
+      result.attemptHistory[0]?.status,
+      "success"
+    );
   }
 );
 
@@ -502,18 +783,34 @@ test(
         assert.ok(
           error instanceof ScraperOrchestrationError
         );
+
         assert.equal(
           error.url,
           "https://example.com"
         );
-        assert.deepEqual(error.failures, []);
+
+        assert.deepEqual(
+          error.failures,
+          []
+        );
+
+        assert.deepEqual(
+          error.attemptHistory,
+          []
+        );
 
         return true;
       }
     );
 
-    assert.equal(httpScraper.calls.length, 0);
-    assert.equal(browserScraper.calls.length, 0);
+    assert.equal(
+      httpScraper.calls.length,
+      0
+    );
+    assert.equal(
+      browserScraper.calls.length,
+      0
+    );
   }
 );
 
@@ -535,7 +832,9 @@ test("ScraperOrchestrator stops when maxAttempts is exhausted", async () => {
   const third = new FakeScraper(
     "third",
     async () => {
-      throw new Error("third should not execute");
+      throw new Error(
+        "third should not execute"
+      );
     }
   );
 
@@ -554,7 +853,37 @@ test("ScraperOrchestrator stops when maxAttempts is exhausted", async () => {
       assert.equal(error.attempts, 2);
       assert.equal(error.maxAttempts, 2);
       assert.equal(error.budgetExhausted, true);
-      assert.equal(error.failures.length, 2);
+      assert.equal(
+        error.failures.length,
+        2
+      );
+
+      assert.equal(
+        error.attemptHistory.length,
+        2
+      );
+
+      assert.deepEqual(
+        error.attemptHistory.map(
+          (entry) => entry.attempt
+        ),
+        [1, 2]
+      );
+
+      assert.deepEqual(
+        error.attemptHistory.map(
+          (entry) => entry.scraperId
+        ),
+        ["first", "second"]
+      );
+
+      assert.deepEqual(
+        error.attemptHistory.map(
+          (entry) => entry.status
+        ),
+        ["failed", "failed"]
+      );
+
       return true;
     }
   );
@@ -570,7 +899,9 @@ test("ScraperOrchestrator uses default maxAttempts of 3", async () => {
       new FakeScraper(
         `scraper-${number}`,
         async () => {
-          throw new Error(`failure-${number}`);
+          throw new Error(
+            `failure-${number}`
+          );
         }
       )
   );
@@ -586,30 +917,86 @@ test("ScraperOrchestrator uses default maxAttempts of 3", async () => {
       assert.equal(error.attempts, 3);
       assert.equal(error.maxAttempts, 3);
       assert.equal(error.budgetExhausted, true);
-      assert.equal(error.failures.length, 3);
+      assert.equal(
+        error.failures.length,
+        3
+      );
+
+      assert.equal(
+        error.attemptHistory.length,
+        3
+      );
+
+      assert.deepEqual(
+        error.attemptHistory.map(
+          (entry) => entry.attempt
+        ),
+        [1, 2, 3]
+      );
+
+      assert.deepEqual(
+        error.attemptHistory.map(
+          (entry) => entry.scraperId
+        ),
+        [
+          "scraper-1",
+          "scraper-2",
+          "scraper-3",
+        ]
+      );
+
       return true;
     }
   );
 
-  assert.equal(scrapers[0]?.calls.length, 1);
-  assert.equal(scrapers[1]?.calls.length, 1);
-  assert.equal(scrapers[2]?.calls.length, 1);
-  assert.equal(scrapers[3]?.calls.length, 0);
+  assert.equal(
+    scrapers[0]?.calls.length,
+    1
+  );
+  assert.equal(
+    scrapers[1]?.calls.length,
+    1
+  );
+  assert.equal(
+    scrapers[2]?.calls.length,
+    1
+  );
+  assert.equal(
+    scrapers[3]?.calls.length,
+    0
+  );
 });
 
 test("ScraperOrchestrator rejects invalid maxAttempts", () => {
   const scraper = new FakeScraper(
     "scraper",
-    async (request) => successResult(request.url, "ok")
+    async (request) =>
+      successResult(request.url, "ok")
   );
 
   assert.throws(
-    () => new ScraperOrchestrator([scraper], undefined, { maxAttempts: 0 }),
-    { message: "maxAttempts must be a positive integer." }
+    () =>
+      new ScraperOrchestrator(
+        [scraper],
+        undefined,
+        { maxAttempts: 0 }
+      ),
+    {
+      message:
+        "maxAttempts must be a positive integer.",
+    }
   );
 
   assert.throws(
-    () => new ScraperOrchestrator([scraper], undefined, { maxAttempts: 1.5 }),
-    { message: "maxAttempts must be a positive integer." }
+    () =>
+      new ScraperOrchestrator(
+        [scraper],
+        undefined,
+        { maxAttempts: 1.5 }
+      ),
+    {
+      message:
+        "maxAttempts must be a positive integer.",
+    }
   );
 });
