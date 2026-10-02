@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "packageManager": "pnpm@11.21.0",
   "scripts": {
-    "build": "pnpm --filter @atlas/core build",
-    "test": "pnpm --filter @atlas/core test"
+    "build": "pnpm --filter @atlas/desktop build",
+    "test": "pnpm --filter @atlas/core test && pnpm --filter @atlas/desktop test",
+    "start": "pnpm --filter @atlas/desktop start"
   }
 }

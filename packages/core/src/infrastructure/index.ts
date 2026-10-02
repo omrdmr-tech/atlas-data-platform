@@ -29,6 +29,9 @@ export * from "./ports/outbox-publisher.js";
 export * from "./adapters/event-bus/outbox-event-publisher.js";
 export * from "./infrastructure-runtime.js";
 export * from "./adapters/scraper/http-scraper.js";
+export {
+  ScraperOrchestrator as ScraperOrchestratorAdapter,
+} from "./adapters/scraper/scraper-orchestrator.js";
 export * from "./adapters/scraper/default-scraper-selection-policy.js";
 export * from "./adapters/scraper/browser-scraper.js";
 

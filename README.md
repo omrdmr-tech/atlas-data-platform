@@ -12,6 +12,17 @@ Atlas Data Platform is a modular, extensible, and enterprise-focused platform de
 
 The platform is not limited to news websites. It is designed as a general-purpose data acquisition and processing system capable of supporting websites, RSS feeds, APIs, documents, social platforms, and future data sources.
 
+## Run the desktop MVP
+
+```powershell
+pnpm install
+pnpm start
+```
+
+The first desktop MVP accepts up to 20 HTTP or HTTPS article addresses, one per line. Atlas fetches each page, stores its original HTML copy in a local archive, and displays the readable page text in the reader. Re-adding an address updates its saved copy. Translation is planned for a later version.
+
+The renderer has no direct Node.js access. Page scripts are not executed in the reader. The archive is stored in the Electron user-data folder on the current computer.
+
 ---
 
 ## Vision
@@ -149,11 +160,9 @@ Documentation includes:
 
 Current Phase:
 
-**Phase 1 — Architecture & Documentation**
+**Phase 2 — Core Platform and Desktop MVP**
 
-No production code has been written yet.
-
-The current focus is establishing a solid software architecture before implementation begins.
+The core already includes scraper orchestration, retry/fallback strategies, health tracking, and an article capture/archive flow. The Electron desktop MVP now provides URL entry and a local article reader. Source management, scheduling, robust article extraction, translation, and packaging remain future work.
 
 ---
 

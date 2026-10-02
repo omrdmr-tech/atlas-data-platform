@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src data:; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>Atlas Haber Arşivi</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div class="brand-mark" aria-hidden="true">A</div>
+        <div>
+          <div class="brand-name">ATLAS</div>
+          <div class="brand-caption">Haber arşivi</div>
+        </div>
+        <div class="topbar-status"><span class="status-dot"></span> Yerel arşiv</div>
+      </header>
+
+      <main>
+        <section class="intro">
+          <p class="eyebrow">KİŞİSEL HABER KÜTÜPHANEN</p>
+          <h1>Okumaya değer olanı sakla.</h1>
+          <p class="intro-copy">Haber adreslerini ekle. Atlas sayfanın kopyasını bilgisayarında saklasın.</p>
+        </section>
+
+        <section class="capture-card" aria-labelledby="capture-heading">
+          <div class="capture-heading-row">
+            <div>
+              <h2 id="capture-heading">Haber adresleri</h2>
+              <p>Her satıra bir HTTP veya HTTPS adresi yazabilirsin.</p>
+            </div>
+            <span class="limit-label">En fazla 20 adres</span>
+          </div>
+          <form id="capture-form">
+            <label class="sr-only" for="article-urls">Haber adresleri</label>
+            <textarea id="article-urls" rows="3" placeholder="https://ornek.com/haber&#10;https://baska-site.com/yazi" required></textarea>
+            <div class="form-footer">
+              <p id="form-message" class="form-message" aria-live="polite">Kopyalar bu bilgisayardaki Atlas arşivinde tutulur.</p>
+              <button id="capture-button" type="submit"><span>Arşive ekle</span><span aria-hidden="true">↗</span></button>
+            </div>
+          </form>
+        </section>
+
+        <section class="library-layout" aria-label="Haber arşivi">
+          <aside class="library-panel">
+            <div class="panel-heading">
+              <div>
+                <h2>Arşiv</h2>
+                <p id="article-count">Yükleniyor…</p>
+              </div>
+              <button id="refresh-button" class="icon-button" type="button" aria-label="Arşivi yenile" title="Yenile">↻</button>
+            </div>
+            <div id="article-list" class="article-list"></div>
+          </aside>
+
+          <article id="reader" class="reader-panel">
+            <div class="reader-empty">
+              <div class="empty-icon" aria-hidden="true">▤</div>
+              <h2>Arşivinden bir haber seç</h2>
+              <p>Kaydettiğin sayfanın metni burada açılır. Orijinal HTML kopyası da bilgisayarında saklanır.</p>
+            </div>
+          </article>
+        </section>
+      </main>
+      <footer>Çeviri daha sonraki sürümde eklenecek.</footer>
+    </div>
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
