@@ -91,7 +91,7 @@ ipcMain.handle("articles:get", async (_event, sourceUrl: unknown) => {
   return article ? { ...summary(article), html: article.html } : null;
 });
 
-ipcMain.handle("articles:capture", async (_event, rawUrls: unknown) => {
+ipcMain.handle("articles:capture", async (event, rawUrls: unknown) => {
   if (
     !Array.isArray(rawUrls) ||
     rawUrls.length === 0 ||
@@ -100,45 +100,51 @@ ipcMain.handle("articles:capture", async (_event, rawUrls: unknown) => {
     throw new Error(`Enter between 1 and ${maximumArticleAddresses} article addresses.`);
   }
 
-  const urls = rawUrls.map((value) => {
+  const entries = rawUrls.map((value, index) => {
     const url = typeof value === "string" ? value.trim() : "";
     try {
       const parsed = new URL(url);
       parsed.hash = "";
-      return parsed.toString();
+      return { index, url, sourceKey: parsed.toString() };
     } catch {
-      return url;
+      return { index, url, sourceKey: url };
     }
-  }).filter(Boolean);
-  const batchId = await sourceCaptureLog.beginBatch(urls);
-  const results = [];
+  });
+  const sourceKeys = entries.filter(({ url }) => url).map(({ sourceKey }) => sourceKey);
+  const batchId = await sourceCaptureLog.beginBatch(sourceKeys);
+  const results: Array<
+    | { success: true; article: ArticleSummary }
+    | { success: false; url: string; error: string }
+  > = new Array(entries.length);
+  const validEntries = entries.filter(({ url }) => url);
+  let processed = 0;
+  event.sender.send("articles:capture:progress", { processed, total: validEntries.length });
 
-  for (const value of rawUrls) {
-    const url = typeof value === "string" ? value.trim() : "";
-
-    if (!url) {
-      results.push({ success: false, url: "", error: "Empty address." });
-      continue;
-    }
-
-    try {
-      const article = await captureArticle.execute({ url });
-      await sourceCaptureLog.complete(batchId, article.sourceUrl, {
-        status: "success", details: null, language: article.language, region: article.region,
-      });
-      results.push({ success: true, article: summary(article) });
-    } catch (error) {
-      await sourceCaptureLog.complete(batchId, url, {
-        status: "failed", details: error instanceof Error ? error.message : String(error),
-      });
-      results.push({
-        success: false,
-        url,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
+  for (let start = 0; start < validEntries.length; start += 5) {
+    const group = validEntries.slice(start, start + 5);
+    await Promise.all(group.map(async ({ index, url, sourceKey }) => {
+      try {
+        const article = await captureArticle.execute({ url });
+        await sourceCaptureLog.complete(batchId, article.sourceUrl, {
+          status: "success", details: null, language: article.language, region: article.region,
+        });
+        results[index] = { success: true, article: summary(article) };
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        await sourceCaptureLog.complete(batchId, sourceKey, {
+          status: "failed", details: message,
+        });
+        results[index] = { success: false, url, error: message };
+      } finally {
+        processed += 1;
+        event.sender.send("articles:capture:progress", { processed, total: validEntries.length, url });
+      }
+    }));
   }
 
+  for (const { index, url } of entries.filter(({ url }) => !url)) {
+    results[index] = { success: false, url, error: "Empty address." };
+  }
   return results;
 });
 

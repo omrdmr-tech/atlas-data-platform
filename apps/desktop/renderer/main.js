@@ -168,6 +168,9 @@ form.addEventListener("submit", async (event) => {
 
   captureButton.disabled = true;
   setMessage(`${urls.length} adres işleniyor…`);
+  const stopListening = window.atlas.onCaptureProgress(({ processed, total }) => {
+    setMessage(`${processed}/${total} adres işlendi…`);
+  });
 
   try {
     const results = await window.atlas.captureArticles(urls);
@@ -188,6 +191,7 @@ form.addEventListener("submit", async (event) => {
   } catch (error) {
     setMessage(error instanceof Error ? error.message : String(error), "error");
   } finally {
+    stopListening();
     captureButton.disabled = false;
   }
 });
