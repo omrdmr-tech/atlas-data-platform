@@ -13,6 +13,7 @@ export * from "./ports/idempotency-store.js";
 export * from "./adapters/system-clock.js";
 export * from "./adapters/postgresql/postgresql-database.js";
 export * from "./adapters/postgresql/postgresql-repository.js";
+export * from "./adapters/postgresql/postgresql-article-snapshot-repository.js";
 export * from "./adapters/postgresql/postgresql-transaction.js";
 export * from "./adapters/postgresql/postgresql-idempotency-store.js";
 export * from "./adapters/redis/redis-cache.js";
