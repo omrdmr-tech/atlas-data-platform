@@ -7,6 +7,10 @@ import type {
 } from "../../../application/ports/scraper-orchestrator.js";
 
 import type {
+  FailureClassifier,
+} from "../../../application/ports/failure-classifier.js";
+
+import type {
   ScrapeRequest,
   ScrapeResult,
   Scraper,
@@ -56,6 +60,10 @@ import {
 } from "./content-access-detector.js";
 
 import {
+  DefaultFailureClassifier,
+} from "./failure-classifier.js";
+
+import {
   SystemRequestIdGenerator,
 } from "../logging/system-request-id-generator.js";
 
@@ -63,6 +71,7 @@ export interface ScraperOrchestratorOptions {
   readonly processLog?: ProcessLog;
   readonly sourceAccessLog?: SourceAccessLog;
   readonly accessDetector?: SourceAccessDetector;
+  readonly failureClassifier?: FailureClassifier;
   readonly requestIdGenerator?: RequestIdGenerator;
   readonly now?: () => Date;
   readonly maxAttempts?: number;
@@ -76,6 +85,7 @@ export class ScraperOrchestrator
   private readonly processLog?: ProcessLog;
   private readonly sourceAccessLog?: SourceAccessLog;
   private readonly accessDetector: SourceAccessDetector;
+  private readonly failureClassifier: FailureClassifier;
   private readonly requestIdGenerator: RequestIdGenerator;
   private readonly now: () => Date;
   private readonly maxAttempts: number;
@@ -126,6 +136,9 @@ export class ScraperOrchestrator
     this.accessDetector =
       options.accessDetector ??
       new ContentAccessDetector();
+    this.failureClassifier =
+      options.failureClassifier ??
+      new DefaultFailureClassifier();
     this.requestIdGenerator =
       options.requestIdGenerator ??
       new SystemRequestIdGenerator();
@@ -248,12 +261,22 @@ export class ScraperOrchestrator
             : `Scraper returned HTTP ${result.statusCode}.`
         );
 
-        failures.push({
+        const failure: ScraperFailure = {
           scraperId: scraper.id,
           reason,
           statusCode: result.statusCode,
           error,
-        });
+          classification: this.failureClassifier.classify(
+            {
+              scraperId: scraper.id,
+              reason,
+              statusCode: result.statusCode,
+              error,
+            },
+            access
+          ),
+        };
+        failures.push(failure);
 
         const completedAt = this.now();
 
@@ -303,12 +326,19 @@ export class ScraperOrchestrator
           contentAvailable: false,
         });
 
-        failures.push({
+        const failure: ScraperFailure = {
           scraperId: scraper.id,
           reason,
           statusCode: null,
           error,
-        });
+          classification: this.failureClassifier.classify({
+            scraperId: scraper.id,
+            reason,
+            statusCode: null,
+            error,
+          }),
+        };
+        failures.push(failure);
 
         const completedAt = this.now();
 

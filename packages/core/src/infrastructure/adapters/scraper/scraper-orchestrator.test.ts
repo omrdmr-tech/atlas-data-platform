@@ -384,6 +384,18 @@ test("ScraperOrchestrator classifies HTTP 403 as blocked", async () => {
         error.failures[0]?.statusCode,
         403
       );
+      assert.equal(
+        error.failures[0]?.classification?.technicalFailure,
+        "blocked"
+      );
+      assert.equal(
+        error.failures[0]?.classification?.accessCondition,
+        "bot-blocked"
+      );
+      assert.equal(
+        error.failures[0]?.classification?.recoveryHint,
+        "browser"
+      );
 
       assert.equal(
         error.attemptHistory.length,

@@ -1,4 +1,5 @@
 import type { ScrapeRequest, ScrapeResult } from "./scraper.js";
+import type { FailureClassification } from "./failure-classifier.js";
 
 export type ScraperFailureReason =
   | "blocked"
@@ -14,6 +15,7 @@ export interface ScraperFailure {
   readonly reason: ScraperFailureReason;
   readonly statusCode: number | null;
   readonly error: unknown;
+  readonly classification?: FailureClassification;
 }
 
 export type ScraperAttemptStatus = "success" | "failed";
