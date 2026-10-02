@@ -34,11 +34,42 @@ export class CaptureArticle
       contentType: orchestration.result.contentType,
       fetchedAt: this.clock.now().toISOString(),
       scraperId: orchestration.scraperId,
+      ...extractPageLocale(orchestration.result.content),
     });
 
     await this.articles.save(article);
     return article;
   }
+}
+
+function extractPageLocale(html: string): { language: string | null; region: string | null } {
+  const language = readHtmlAttribute(html, "lang") ??
+    readMetaContent(html, ["og:locale", "content-language", "language", "dc.language"]);
+  const region = readMetaContent(html, ["geo.region", "place:location:country", "country"]);
+  const localeParts = language?.replaceAll("_", "-").split("-") ?? [];
+  const localeRegion = localeParts.find((part) => /^[A-Z]{2}$/.test(part));
+  const normalizedLanguage = localeParts[0]?.toLowerCase() ?? null;
+
+  return {
+    language: normalizedLanguage,
+    region: region?.toUpperCase() ?? localeRegion ?? null,
+  };
+}
+
+function readHtmlAttribute(html: string, attribute: string): string | null {
+  const tag = html.match(/<html\b[^>]*>/i)?.[0];
+  const match = tag?.match(new RegExp(`\\b${attribute}\\s*=\\s*["']([^"']+)["']`, "i"));
+  return match?.[1]?.trim() || null;
+}
+
+function readMetaContent(html: string, names: readonly string[]): string | null {
+  for (const tag of html.matchAll(/<meta\b[^>]*>/gi)) {
+    const name = tag[0].match(/\b(?:name|property|http-equiv)\s*=\s*["']([^"']+)["']/i)?.[1];
+    if (!name || !names.includes(name.toLowerCase())) continue;
+    const content = tag[0].match(/\bcontent\s*=\s*["']([^"']+)["']/i)?.[1]?.trim();
+    if (content) return content;
+  }
+  return null;
 }
 
 function normalizeSourceUrl(value: string): string {

@@ -7,22 +7,32 @@ import {
   CaptureArticle,
   DefaultScraperSelectionPolicy,
   HttpScraper,
+  PostgreSQLArticleSnapshotRepository,
+  PostgreSQLArticleSourceCaptureLog,
+  PostgreSQLDatabase,
   ScraperOrchestratorAdapter,
   SystemClock,
 } from "@atlas/core";
-import type { ArticleSnapshot } from "@atlas/core";
+import type { ArticleSnapshot, ArticleSnapshotRepository, ArticleSourceCaptureLog } from "@atlas/core";
 import { FileArticleSnapshotRepository } from "./file-article-snapshot-repository.js";
+import { FileSourceCaptureLog } from "./file-source-capture-log.js";
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url));
 const maximumArticleAddresses = 500;
-const archive = new FileArticleSnapshotRepository(
+const fileArchive = new FileArticleSnapshotRepository(
   join(app.getPath("userData"), "article-archive.json")
 );
+const fileSourceCaptureLog = new FileSourceCaptureLog(
+  join(app.getPath("userData"), "source-capture-log.json")
+);
+let archive: ArticleSnapshotRepository = fileArchive;
+let sourceCaptureLog: ArticleSourceCaptureLog = fileSourceCaptureLog;
+let database: PostgreSQLDatabase | null = null;
 const scraper = new ScraperOrchestratorAdapter(
   [new HttpScraper(), new BrowserScraper()],
   new DefaultScraperSelectionPolicy()
 );
-const captureArticle = new CaptureArticle(scraper, archive, new SystemClock());
+let captureArticle = new CaptureArticle(scraper, archive, new SystemClock());
 
 interface ArticleSummary {
   readonly sourceUrl: string;
@@ -30,6 +40,8 @@ interface ArticleSummary {
   readonly contentType: string | null;
   readonly fetchedAt: string;
   readonly scraperId: string;
+  readonly language: string | null;
+  readonly region: string | null;
 }
 
 function summary(article: ArticleSnapshot): ArticleSummary {
@@ -39,6 +51,8 @@ function summary(article: ArticleSnapshot): ArticleSummary {
     contentType: article.contentType,
     fetchedAt: article.fetchedAt,
     scraperId: article.scraperId,
+    language: article.language,
+    region: article.region,
   };
 }
 
@@ -66,6 +80,8 @@ ipcMain.handle("articles:list", async () => {
   return articles.map(summary);
 });
 
+ipcMain.handle("sources:list", async () => sourceCaptureLog.listSources());
+
 ipcMain.handle("articles:get", async (_event, sourceUrl: unknown) => {
   if (typeof sourceUrl !== "string") {
     throw new Error("Article address is required.");
@@ -84,6 +100,17 @@ ipcMain.handle("articles:capture", async (_event, rawUrls: unknown) => {
     throw new Error(`Enter between 1 and ${maximumArticleAddresses} article addresses.`);
   }
 
+  const urls = rawUrls.map((value) => {
+    const url = typeof value === "string" ? value.trim() : "";
+    try {
+      const parsed = new URL(url);
+      parsed.hash = "";
+      return parsed.toString();
+    } catch {
+      return url;
+    }
+  }).filter(Boolean);
+  const batchId = await sourceCaptureLog.beginBatch(urls);
   const results = [];
 
   for (const value of rawUrls) {
@@ -96,8 +123,14 @@ ipcMain.handle("articles:capture", async (_event, rawUrls: unknown) => {
 
     try {
       const article = await captureArticle.execute({ url });
+      await sourceCaptureLog.complete(batchId, article.sourceUrl, {
+        status: "success", details: null, language: article.language, region: article.region,
+      });
       results.push({ success: true, article: summary(article) });
     } catch (error) {
+      await sourceCaptureLog.complete(batchId, url, {
+        status: "failed", details: error instanceof Error ? error.message : String(error),
+      });
       results.push({
         success: false,
         url,
@@ -109,13 +142,25 @@ ipcMain.handle("articles:capture", async (_event, rawUrls: unknown) => {
   return results;
 });
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  const connectionString = process.env.ATLAS_DATABASE_URL;
+  if (connectionString) {
+    database = new PostgreSQLDatabase({ connectionString });
+    await database.connect();
+    archive = new PostgreSQLArticleSnapshotRepository(database);
+    sourceCaptureLog = new PostgreSQLArticleSourceCaptureLog(database);
+    captureArticle = new CaptureArticle(scraper, archive, new SystemClock());
+  }
   createWindow();
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
     }
   });
+});
+
+app.on("will-quit", () => {
+  if (database) void database.disconnect();
 });
 
 app.on("window-all-closed", () => {

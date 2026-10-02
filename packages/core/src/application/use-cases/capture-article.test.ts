@@ -55,6 +55,20 @@ test("CaptureArticle stores the returned HTML snapshot", async () => {
   assert.equal(saved[0], result);
 });
 
+test("CaptureArticle extracts language and region from page metadata", async () => {
+  const { useCase } = harness('<html lang="tr-TR"><head><meta name="geo.region" content="TR-34"></head><body><article>Haber</article></body></html>');
+  const result = await useCase.execute({ url: "https://example.com/story" });
+  assert.equal(result.language, "tr");
+  assert.equal(result.region, "TR-34");
+});
+
+test("CaptureArticle derives country from locale when region metadata is missing", async () => {
+  const { useCase } = harness('<html lang="en-US"><article>News</article></html>');
+  const result = await useCase.execute({ url: "https://example.com/story" });
+  assert.equal(result.language, "en");
+  assert.equal(result.region, "US");
+});
+
 test("CaptureArticle rejects invalid URLs before scraping", async () => {
   const { useCase, calls } = harness();
 

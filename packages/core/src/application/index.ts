@@ -10,6 +10,7 @@ export * from "./ports/scraper.js";
 export * from "./ports/scraper-orchestrator.js";
 export * from "./ports/scraper-capabilities.js";
 export * from "./ports/article-snapshot-repository.js";
+export * from "./ports/article-source-capture-log.js";
 
 export * from "./ports/proxy-provider.js";
 export * from "./ports/proxy-transport.js";

@@ -57,6 +57,8 @@ test("PostgreSQL article repository lazily initializes and upserts snapshots", a
     "text/html",
     "2026-10-02T12:00:00.000Z",
     "http-scraper",
+    null,
+    null,
   ]);
 });
 

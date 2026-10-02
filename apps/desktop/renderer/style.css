@@ -31,6 +31,12 @@ h1 { margin-bottom: 8px; font: 700 30px Manrope, sans-serif; letter-spacing: -.0
 .intro-copy { margin-bottom: 0; color: var(--muted); font-size: 14px; }
 
 .capture-card { padding: 21px 23px 17px; border: 1px solid #e1e7e9; border-radius: 14px; background: #fff; box-shadow: 0 5px 18px #2035470a; }
+.sources-card { margin-top: 14px; padding: 15px 18px; border: 1px solid var(--line); border-radius: 13px; background: #fff; }
+.source-list { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 11px; }
+.source-item { display: flex; flex-direction: column; gap: 4px; max-width: 320px; padding: 8px 11px; border: 1px solid var(--line); border-radius: 8px; background: #fff; text-align: left; }
+.source-item:hover { border-color: #92c7c2; background: #f5fbfa; }
+.source-item span { overflow: hidden; color: #293b46; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.source-item small { color: var(--muted); font-size: 10px; }
 .capture-heading-row, .panel-heading, .form-footer { display: flex; align-items: center; justify-content: space-between; gap: 18px; }
 .capture-heading-row h2, .panel-heading h2 { margin-bottom: 4px; font: 700 15px Manrope, sans-serif; }
 .capture-heading-row p, .panel-heading p { margin: 0; color: var(--muted); font-size: 12px; }

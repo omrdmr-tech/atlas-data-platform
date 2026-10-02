@@ -14,6 +14,8 @@ interface StoredArticleSnapshot {
   readonly contentType: string | null;
   readonly fetchedAt: string;
   readonly scraperId: string;
+  readonly language?: string | null;
+  readonly region?: string | null;
 }
 
 export class FileArticleSnapshotRepository
@@ -104,6 +106,8 @@ function toRecord(article: ArticleSnapshot): StoredArticleSnapshot {
     contentType: article.contentType,
     fetchedAt: article.fetchedAt,
     scraperId: article.scraperId,
+    language: article.language,
+    region: article.region,
   };
 }
 
@@ -128,7 +132,9 @@ function isStoredArticle(value: unknown): value is StoredArticleSnapshot {
     typeof entry.html === "string" &&
     (typeof entry.contentType === "string" || entry.contentType === null) &&
     typeof entry.fetchedAt === "string" &&
-    typeof entry.scraperId === "string";
+    typeof entry.scraperId === "string" &&
+    (entry.language === undefined || typeof entry.language === "string" || entry.language === null) &&
+    (entry.region === undefined || typeof entry.region === "string" || entry.region === null);
 }
 
 function isMissingFile(error: unknown): boolean {

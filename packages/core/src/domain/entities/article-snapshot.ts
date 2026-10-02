@@ -7,6 +7,8 @@ export interface ArticleSnapshotProperties {
   readonly contentType: string | null;
   readonly fetchedAt: string;
   readonly scraperId: string;
+  readonly language?: string | null;
+  readonly region?: string | null;
 }
 
 export class ArticleSnapshot extends Entity<string> {
@@ -16,6 +18,8 @@ export class ArticleSnapshot extends Entity<string> {
   public readonly contentType: string | null;
   public readonly fetchedAt: string;
   public readonly scraperId: string;
+  public readonly language: string | null;
+  public readonly region: string | null;
 
   public constructor(properties: ArticleSnapshotProperties) {
     const sourceUrl = normalizeHttpUrl(properties.sourceUrl);
@@ -27,6 +31,8 @@ export class ArticleSnapshot extends Entity<string> {
     this.contentType = properties.contentType;
     this.fetchedAt = normalizeDate(properties.fetchedAt);
     this.scraperId = requireText(properties.scraperId, "scraperId");
+    this.language = normalizeOptionalText(properties.language);
+    this.region = normalizeOptionalText(properties.region);
   }
 }
 
@@ -69,4 +75,9 @@ function requireText(value: string, name: string): string {
   }
 
   return normalized;
+}
+
+function normalizeOptionalText(value: string | null | undefined): string | null {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
 }

@@ -5,6 +5,7 @@ const formMessage = document.querySelector("#form-message");
 const articleList = document.querySelector("#article-list");
 const articleCount = document.querySelector("#article-count");
 const reader = document.querySelector("#reader");
+const sourceList = document.querySelector("#source-list");
 let selectedUrl = null;
 
 function setMessage(message, tone = "") {
@@ -71,6 +72,36 @@ async function refreshList() {
   return articles;
 }
 
+async function refreshSources() {
+  const sources = await window.atlas.listSources();
+  sourceList.replaceChildren();
+  if (sources.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "list-empty";
+    empty.textContent = "Henüz adres kaydı yok.";
+    sourceList.append(empty);
+    return;
+  }
+  for (const source of sources) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "source-item";
+    const address = document.createElement("span");
+    address.textContent = source.sourceUrl;
+    const info = document.createElement("small");
+    info.textContent = [source.language, source.region, source.lastStatus === "failed" ? "Hata" : source.lastStatus === "success" ? "Başarılı" : "Sırada"].filter(Boolean).join(" · ");
+    row.append(address, info);
+    row.title = "Bu adresi giriş alanına getirip düzenle";
+    row.addEventListener("click", () => {
+      const urls = textarea.value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+      if (!urls.includes(source.sourceUrl)) urls.push(source.sourceUrl);
+      textarea.value = urls.join("\n");
+      textarea.focus();
+    });
+    sourceList.append(row);
+  }
+}
+
 async function openArticle(sourceUrl) {
   selectedUrl = sourceUrl;
   reader.replaceChildren();
@@ -95,7 +126,8 @@ async function openArticle(sourceUrl) {
 
     const metadata = document.createElement("div");
     metadata.className = "reader-meta";
-    metadata.textContent = `Kaydedilme: ${formatDate(snapshot.fetchedAt)} · ${snapshot.scraperId}`;
+    const locale = [snapshot.language, snapshot.region].filter(Boolean).join(" · ");
+    metadata.textContent = `Kaydedilme: ${formatDate(snapshot.fetchedAt)} · ${snapshot.scraperId}${locale ? ` · ${locale}` : ""}`;
 
     const heading = document.createElement("h2");
     heading.className = "reader-title";
@@ -148,6 +180,7 @@ form.addEventListener("submit", async (event) => {
     textarea.value = "";
 
     const articles = await refreshList();
+    await refreshSources();
     if (articles.length > 0) {
       const latest = results.find((result) => result.success)?.article?.sourceUrl;
       await openArticle(latest || articles[0].sourceUrl);
@@ -167,3 +200,4 @@ refreshList().catch((error) => {
   articleCount.textContent = "yüklenemedi";
   setMessage(error instanceof Error ? error.message : String(error), "error");
 });
+refreshSources().catch((error) => setMessage(error instanceof Error ? error.message : String(error), "error"));

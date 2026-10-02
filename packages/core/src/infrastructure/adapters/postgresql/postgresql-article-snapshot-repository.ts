@@ -10,6 +10,8 @@ interface ArticleSnapshotRow {
   content_type: string | null;
   fetched_at: Date | string;
   scraper_id: string;
+  language: string | null;
+  region: string | null;
 }
 
 export class PostgreSQLArticleSnapshotRepository
@@ -26,7 +28,7 @@ export class PostgreSQLArticleSnapshotRepository
     try {
       await transaction.begin();
       const result = await transaction.query<ArticleSnapshotRow>(
-        `SELECT source_url, final_url, html, content_type, fetched_at, scraper_id
+        `SELECT source_url, final_url, html, content_type, fetched_at, scraper_id, language, region
          FROM article_snapshots
          WHERE source_url = $1
          LIMIT 1`,
@@ -52,7 +54,7 @@ export class PostgreSQLArticleSnapshotRepository
     try {
       await transaction.begin();
       const result = await transaction.query<ArticleSnapshotRow>(
-        `SELECT source_url, final_url, html, content_type, fetched_at, scraper_id
+        `SELECT source_url, final_url, html, content_type, fetched_at, scraper_id, language, region
          FROM article_snapshots
          ORDER BY fetched_at DESC
          LIMIT $1`,
@@ -75,14 +77,16 @@ export class PostgreSQLArticleSnapshotRepository
       await transaction.begin();
       await transaction.query(
         `INSERT INTO article_snapshots
-           (source_url, final_url, html, content_type, fetched_at, scraper_id)
-         VALUES ($1, $2, $3, $4, $5, $6)
+           (source_url, final_url, html, content_type, fetched_at, scraper_id, language, region)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
          ON CONFLICT (source_url) DO UPDATE SET
            final_url = EXCLUDED.final_url,
            html = EXCLUDED.html,
            content_type = EXCLUDED.content_type,
            fetched_at = EXCLUDED.fetched_at,
-           scraper_id = EXCLUDED.scraper_id`,
+           scraper_id = EXCLUDED.scraper_id,
+           language = EXCLUDED.language,
+           region = EXCLUDED.region`,
         [
           article.sourceUrl,
           article.finalUrl,
@@ -90,6 +94,8 @@ export class PostgreSQLArticleSnapshotRepository
           article.contentType,
           article.fetchedAt,
           article.scraperId,
+          article.language,
+          article.region,
         ]
       );
       await transaction.commit();
@@ -122,9 +128,13 @@ export class PostgreSQLArticleSnapshotRepository
           html TEXT NOT NULL,
           content_type TEXT,
           fetched_at TIMESTAMPTZ NOT NULL,
-          scraper_id TEXT NOT NULL
+          scraper_id TEXT NOT NULL,
+          language TEXT,
+          region TEXT
         )
       `);
+      await transaction.query("ALTER TABLE article_snapshots ADD COLUMN IF NOT EXISTS language TEXT");
+      await transaction.query("ALTER TABLE article_snapshots ADD COLUMN IF NOT EXISTS region TEXT");
       await transaction.query(`
         CREATE INDEX IF NOT EXISTS idx_article_snapshots_fetched_at
           ON article_snapshots (fetched_at DESC)
@@ -147,5 +157,7 @@ function mapRow(row: ArticleSnapshotRow): ArticleSnapshot {
       ? row.fetched_at.toISOString()
       : row.fetched_at,
     scraperId: row.scraper_id,
+    language: row.language ?? null,
+    region: row.region ?? null,
   });
 }

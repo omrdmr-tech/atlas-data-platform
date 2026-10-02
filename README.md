@@ -162,7 +162,7 @@ Current Phase:
 
 **Phase 2 — Core Platform and Desktop MVP**
 
-The core already includes scraper orchestration, retry/fallback strategies, health tracking, and an article capture/archive flow. The Electron desktop MVP now provides URL entry and a local article reader. Source management, scheduling, robust article extraction, translation, and packaging remain future work.
+The core already includes scraper orchestration, retry/fallback strategies, health tracking, and an article capture/archive flow. The Electron desktop MVP provides URL entry, a local article reader, saved source addresses, capture status history, and language/region metadata parsed from page metadata. By default, it persists locally as JSON. Set `ATLAS_DATABASE_URL` before launching the desktop app to use PostgreSQL for article snapshots, source addresses, and capture logs. Scheduling, robust article extraction, translation, and packaging remain future work.
 
 ---
 
