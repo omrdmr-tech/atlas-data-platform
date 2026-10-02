@@ -14,6 +14,7 @@ import type { ArticleSnapshot } from "@atlas/core";
 import { FileArticleSnapshotRepository } from "./file-article-snapshot-repository.js";
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url));
+const maximumArticleAddresses = 500;
 const archive = new FileArticleSnapshotRepository(
   join(app.getPath("userData"), "article-archive.json")
 );
@@ -75,8 +76,12 @@ ipcMain.handle("articles:get", async (_event, sourceUrl: unknown) => {
 });
 
 ipcMain.handle("articles:capture", async (_event, rawUrls: unknown) => {
-  if (!Array.isArray(rawUrls) || rawUrls.length === 0 || rawUrls.length > 20) {
-    throw new Error("Enter between 1 and 20 article addresses.");
+  if (
+    !Array.isArray(rawUrls) ||
+    rawUrls.length === 0 ||
+    rawUrls.length > maximumArticleAddresses
+  ) {
+    throw new Error(`Enter between 1 and ${maximumArticleAddresses} article addresses.`);
   }
 
   const results = [];

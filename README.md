@@ -19,7 +19,7 @@ pnpm install
 pnpm start
 ```
 
-The first desktop MVP accepts up to 20 HTTP or HTTPS article addresses, one per line. Atlas fetches each page, stores its original HTML copy in a local archive, and displays the readable page text in the reader. Re-adding an address updates its saved copy. Translation is planned for a later version.
+The first desktop MVP accepts up to 500 HTTP or HTTPS article addresses per batch, one per line. Atlas fetches each page, stores its original HTML copy in a local archive, and displays the readable page text in the reader. Re-adding an address updates its saved copy. Translation is planned for a later version.
 
 The renderer has no direct Node.js access. Page scripts are not executed in the reader. The archive is stored in the Electron user-data folder on the current computer.
 

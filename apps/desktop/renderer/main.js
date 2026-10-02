@@ -129,8 +129,8 @@ form.addEventListener("submit", async (event) => {
     return;
   }
 
-  if (urls.length > 20) {
-    setMessage("Bir seferde en fazla 20 adres ekleyebilirsin.", "error");
+  if (urls.length > 500) {
+    setMessage("Bir seferde en fazla 500 adres ekleyebilirsin.", "error");
     return;
   }
 
