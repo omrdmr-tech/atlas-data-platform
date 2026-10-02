@@ -118,26 +118,36 @@ ipcMain.handle("articles:capture", async (event, rawUrls: unknown) => {
   > = new Array(entries.length);
   const validEntries = entries.filter(({ url }) => url);
   let processed = 0;
-  event.sender.send("articles:capture:progress", { processed, total: validEntries.length });
+  event.sender.send("articles:capture:progress", { processed, total: validEntries.length, phase: "started" });
 
   for (let start = 0; start < validEntries.length; start += 5) {
     const group = validEntries.slice(start, start + 5);
     await Promise.all(group.map(async ({ index, url, sourceKey }) => {
+      event.sender.send("articles:capture:progress", {
+        processed, total: validEntries.length, url, phase: "fetching",
+      });
+      let succeeded = false;
+      let failureMessage: string | null = null;
       try {
         const article = await captureArticle.execute({ url });
         await sourceCaptureLog.complete(batchId, article.sourceUrl, {
           status: "success", details: null, language: article.language, region: article.region,
         });
         results[index] = { success: true, article: summary(article) };
+        succeeded = true;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
+        failureMessage = message;
         await sourceCaptureLog.complete(batchId, sourceKey, {
           status: "failed", details: message,
         });
         results[index] = { success: false, url, error: message };
       } finally {
         processed += 1;
-        event.sender.send("articles:capture:progress", { processed, total: validEntries.length, url });
+        event.sender.send("articles:capture:progress", {
+          processed, total: validEntries.length, url, phase: "completed",
+          success: succeeded, error: failureMessage,
+        });
       }
     }));
   }

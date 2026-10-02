@@ -2,6 +2,7 @@ const form = document.querySelector("#capture-form");
 const textarea = document.querySelector("#article-urls");
 const captureButton = document.querySelector("#capture-button");
 const formMessage = document.querySelector("#form-message");
+const captureStatus = document.querySelector("#capture-status");
 const articleList = document.querySelector("#article-list");
 const articleCount = document.querySelector("#article-count");
 const reader = document.querySelector("#reader");
@@ -11,6 +12,11 @@ let selectedUrl = null;
 function setMessage(message, tone = "") {
   formMessage.textContent = message;
   formMessage.className = `form-message ${tone}`.trim();
+}
+
+function setCaptureStatus(message, tone = "") {
+  captureStatus.textContent = message;
+  captureStatus.className = `capture-status ${tone}`.trim();
 }
 
 function readableAddress(value) {
@@ -158,18 +164,35 @@ form.addEventListener("submit", async (event) => {
 
   if (urls.length === 0) {
     setMessage("En az bir haber adresi gir.", "error");
+    setCaptureStatus("Çekim başlamadı: adres kutusu boş. Her satıra bir haber sayfası adresi gir.", "error");
     return;
   }
 
   if (urls.length > 500) {
     setMessage("Bir seferde en fazla 500 adres ekleyebilirsin.", "error");
+    setCaptureStatus("Çekim başlamadı: tek seferde en fazla 500 adres girebilirsin.", "error");
     return;
   }
 
   captureButton.disabled = true;
   setMessage(`${urls.length} adres işleniyor…`);
-  const stopListening = window.atlas.onCaptureProgress(({ processed, total }) => {
+  setCaptureStatus(`Çekim başladı: ${urls.length} adres alınacak. Her sayfa çekilip arşive kaydediliyor.`, "running");
+  const activeUrls = new Set();
+  const stopListening = window.atlas.onCaptureProgress((progress) => {
+    const { processed, total, url, phase, success, error } = progress;
+    if (phase === "fetching" && url) {
+      activeUrls.add(url);
+      setCaptureStatus(`${processed}/${total} adres tamamlandı. Şu anda çekiliyor: ${[...activeUrls].slice(-5).join(" · ")}`, "running");
+      return;
+    }
+    if (phase === "completed" && url) {
+      activeUrls.delete(url);
+      const result = success ? "Arşive kaydedildi" : `Çekilemedi${error ? `: ${error}` : ""}`;
+      setCaptureStatus(`${processed}/${total} adres tamamlandı. ${url} — ${result}`, success ? "success" : "error");
+      return;
+    }
     setMessage(`${processed}/${total} adres işlendi…`);
+    if (total === 0) setCaptureStatus("Girilen geçerli bir adres yok; çekim yapılmadı.", "error");
   });
 
   try {
@@ -180,6 +203,9 @@ form.addEventListener("submit", async (event) => {
     setMessage(failed === 0
       ? `${saved} haber arşive kaydedildi.`
       : `${saved} kayıt başarılı, ${failed} adres alınamadı.`, tone);
+    setCaptureStatus(failed === 0
+      ? `Tamamlandı: ${saved} haber arşive kaydedildi.`
+      : `Tamamlandı: ${saved} haber kaydedildi, ${failed} adres başarısız oldu. Hata ayrıntıları kayıtlı adreslerin loglarında tutuldu.`, tone);
     textarea.value = "";
 
     const articles = await refreshList();

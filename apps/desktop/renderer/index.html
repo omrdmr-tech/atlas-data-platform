@@ -38,7 +38,10 @@
           </div>
           <form id="capture-form">
             <label class="sr-only" for="article-urls">Haber adresleri</label>
-            <textarea id="article-urls" rows="3" placeholder="https://ornek.com/haber&#10;https://baska-site.com/yazi" required></textarea>
+            <textarea id="article-urls" rows="3" placeholder="https://ornek.com/haber&#10;https://baska-site.com/yazi"></textarea>
+            <div id="capture-status" class="capture-status" role="status" aria-live="polite">
+              Henüz çekim başlatılmadı. Haber adreslerini girip “Arşive ekle” düğmesine bas.
+            </div>
             <div class="form-footer">
               <p id="form-message" class="form-message" aria-live="polite">Kopyalar bu bilgisayardaki Atlas arşivinde tutulur.</p>
               <button id="capture-button" type="submit"><span>Arşive ekle</span><span aria-hidden="true">↗</span></button>
